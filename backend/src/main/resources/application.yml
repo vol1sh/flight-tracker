@@ -1,0 +1,63 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: flight-tracker-service
+  threads:
+    virtual:
+      enabled: true
+
+  # Подключение к PostgreSQL (порт 5433 для локального запуска с Mac)
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/flight_tracker_db}
+    username: ${SPRING_DATASOURCE_USERNAME:tracker_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:tracker_secret}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+
+  # Управление миграциями БД
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  # Подключение к Redis
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2000ms
+
+# Интерактивная спецификация API (Swagger UI)
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+# Конфигурация Circuit Breaker для изоляции внешнего API
+resilience4j:
+  circuitbreaker:
+    instances:
+      aviationApi:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50.0
+        wait-duration-in-open-state: 15000ms
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.tracker.flight: DEBUG
