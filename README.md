@@ -6,10 +6,9 @@
 ---
 
 ## 👥 Команда проекта
-| ФИО студента | Академическая группа | Роль в проекте | GitHub Профиль |
+| ФИО студента | Номер группы | Роль в проекте | GitHub Профиль |
 | :--- | :--- | :--- | :--- |
 | **Семён Лесовников** | 5130904/40106 | Team Lead / Backend | [@vol1sh](https://github.com/vol1sh) |
-| **[ФИО Напарника]** | 5130201/XXXXX | Backend / Frontend | [@username] |
 
 * **Куратор / Преподаватель:** Юркин В. А.
 * **Инструмент координации:** [Kanban-доска проекта](https://github.com/users/vol1sh/projects/1)
@@ -103,28 +102,28 @@ C4Context
 
     Rel(passenger, flightTracker, "Просматривает расписание, подписывается на рейсы", "HTTPS / JSON")
     Rel(flightTracker, aviationApi, "Запрашивает статусы рейсов (Circuit Breaker)", "HTTPS / REST")
+```
 
 ### Уровень 2. Диаграмма контейнеров (Containers)
-
 ```mermaid
 C4Container
-    title C4 Level 2: Диаграмма контейнеров сервиса мониторинга полетов
+    title C4 Level 2: Диаграмма контейнеров
 
-    Person(user, "Пользователь", "Пассажир или встречающий в браузере")
+    Person(user, "Пользователь", "Браузер / Мобильный клиент")
 
-    Container(spa, "Single Page Application", "React, TypeScript", "Интерфейс поиска рейсов, просмотра табло задержек и оформления подписок")
-
+    Container(spa, "Single Page Application", "React, TypeScript", "Интерфейс поиска рейсов, табло аэропортов и оповещений")
+    
     Container_Boundary(backend_boundary, "Серверный контур (Docker)") {
-        Container(backend, "Backend Application", "Java 21, Spring Boot 3", "REST API, бизнес-логика расчетов, кэширование, Circuit Breaker Resilience4j")
-        ContainerDb(postgres, "PostgreSQL 16", "Реляционная СУБД", "Хранение истории рейсов, расписаний и аудита задержек (миграции Flyway)")
-        ContainerDb(redis, "Redis 7", "In-Memory Data Store", "Кэширование "горячих" рейсов (TTL 3 мин) и защита внешнего API от исчерпания лимитов")
+        Container(backend, "Backend Application", "Java 21, Spring Boot 3", "REST API, валидация DTO, бизнес-логика, Circuit Breaker Resilience4j")
+        ContainerDb(postgres, "Primary Database", "PostgreSQL 16", "Хранение рейсов, расписаний и истории статусов задержек (Flyway)")
+        ContainerDb(redis, "In-Memory Cache", "Redis 7", "Кэширование ответов внешнего API и активных рейсов (TTL 3 мин)")
     }
 
-    System_Ext(aviationApi, "Aviation API", "AviationStack / OpenSky REST API")
+    System_Ext(aviationApi, "External Flight API", "AviationStack REST API")
 
-    Rel(user, spa, "Просмотр табло, ввод номера рейса", "HTTPS")
-    Rel(spa, backend, "Запросы данных о рейсах, создание подписок", "JSON / REST / :8080")
-    Rel(backend, postgres, "Чтение/запись истории полетов", "JDBC (HikariCP) / :5432")
-    Rel(backend, redis, "Чтение/запись кэшированных статусов", "Lettuce (RESP) / :6379")
-    Rel(backend, aviationApi, "Синхронизация статусов с защитой через Circuit Breaker", "REST Client / HTTPS")
+    Rel(user, spa, "Взаимодействует", "HTTPS")
+    Rel(spa, backend, "Вызовы REST API", "JSON / HTTPS / :8080")
+    Rel(backend, postgres, "Чтение / Запись истории", "JDBC / HikariCP / :5432")
+    Rel(backend, redis, "Чтение / Запись кэша", "Lettuce / RESP / :6379")
+    Rel(backend, aviationApi, "Получение статусов рейсов", "REST Client / HTTPS")
 ```
