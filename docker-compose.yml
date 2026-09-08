@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: flight_tracker_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-flight_tracker_db}
+      POSTGRES_USER: ${POSTGRES_USER:-tracker_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracker_secret}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tracker_user} -d ${POSTGRES_DB:-flight_tracker_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flight_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: flight_tracker_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - flight_network
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+networks:
+  flight_network:
+    driver: bridge
