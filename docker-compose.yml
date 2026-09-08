@@ -35,6 +35,42 @@ services:
     networks:
       - flight_network
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flight_tracker_backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/flight_tracker_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-tracker_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-tracker_secret}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+    networks:
+      - flight_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: flight_tracker_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - flight_network
+
 volumes:
   pgdata:
     driver: local
