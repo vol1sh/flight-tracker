@@ -11,10 +11,8 @@ import com.tracker.flight.repository.FlightRepository;
 import com.tracker.flight.repository.FlightStatusLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.Collections;
@@ -48,23 +46,22 @@ public class FlightService {
 
     @Transactional
     public FlightResponseDto syncAndGetFlight(String flightIata) {
-        String cleanFlight = flightIata.replaceAll("[^A-Za-z0-9]", "").trim().toUpperCase();
+        String cleanFlight = flightIata != null ? flightIata.trim().toUpperCase() : "";
         log.info("Запрос статуса рейса {}", cleanFlight);
 
         Optional<Flight> existingFlightOpt = flightRepository.findByFlightIata(cleanFlight);
 
-        // 1. Оптимизация квоты: если рейс уже приземлился (LANDED) или отменен (CANCELLED),
-        // данные отдаются напрямую из PostgreSQL без обращения во внешнее API.
+        // 1. Если рейс завершен (LANDED или CANCELLED) — отдаем из БД без запроса наружу
         if (existingFlightOpt.isPresent()) {
             Flight existingFlight = existingFlightOpt.get();
             if (existingFlight.getStatus() != null && TERMINAL_STATUSES.contains(existingFlight.getStatus().toUpperCase())) {
-                log.info("Рейс {} находится в терминальном статусе '{}'. Данные возвращены из PostgreSQL без обращения к внешнему API.",
+                log.info("Рейс {} в терминальном статусе '{}'. Отдаем из PostgreSQL.",
                         cleanFlight, existingFlight.getStatus());
                 return mapToFlightResponseDto(existingFlight, false);
             }
         }
 
-        // 2. Если рейса нет в базе или он еще активен — запрашиваем внешнее API
+        // 2. Запрос во внешнее API (или Fallback при сбое)
         ExternalFlightDto externalDto = aviationApiClient.fetchLiveFlight(cleanFlight);
 
         Flight flight;
@@ -107,23 +104,20 @@ public class FlightService {
                 flight = flightRepository.save(flight);
             }
         } else {
-            if (isDegradedFallback || externalDto.getDepartureAirport() == null) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Рейс " + cleanFlight + " не найден в реестре телеметрии");
-            }
-
+            // Первичное сохранение (включая degraded fallback)
             flight = Flight.builder()
-                    .flightIata(externalDto.getFlightIata())
-                    .departureIata(externalDto.getDepartureAirport())
+                    .flightIata(externalDto.getFlightIata() != null ? externalDto.getFlightIata() : cleanFlight)
+                    .departureIata(externalDto.getDepartureAirport() != null ? externalDto.getDepartureAirport() : "—")
                     .departureCity(externalDto.getDepartureCity())
                     .departureAirportName(externalDto.getDepartureAirportName())
-                    .arrivalIata(externalDto.getArrivalAirport())
+                    .arrivalIata(externalDto.getArrivalAirport() != null ? externalDto.getArrivalAirport() : "—")
                     .arrivalCity(externalDto.getArrivalCity())
                     .arrivalAirportName(externalDto.getArrivalAirportName())
                     .scheduledDepartureTime(externalDto.getScheduledDeparture() != null ? externalDto.getScheduledDeparture() : Instant.now())
                     .actualDepartureTime(externalDto.getActualDeparture())
                     .scheduledArrivalTime(externalDto.getScheduledArrival() != null ? externalDto.getScheduledArrival() : Instant.now())
                     .actualArrivalTime(externalDto.getActualArrival())
-                    .status(externalDto.getStatus())
+                    .status(externalDto.getStatus() != null ? externalDto.getStatus() : "UNKNOWN_DEGRADED")
                     .delayMinutes(externalDto.getDelayMinutes() != null ? externalDto.getDelayMinutes() : 0)
                     .build();
 
@@ -144,7 +138,7 @@ public class FlightService {
 
     @Transactional(readOnly = true)
     public List<FlightStatusLogDto> getFlightHistory(String flightIata) {
-        String cleanFlight = flightIata.replaceAll("[^A-Za-z0-9]", "").trim().toUpperCase();
+        String cleanFlight = flightIata != null ? flightIata.trim().toUpperCase() : "";
         return flightRepository.findByFlightIata(cleanFlight)
                 .map(flight -> logRepository.findByFlightIdOrderByRecordedAtDesc(flight.getId())
                         .stream()
