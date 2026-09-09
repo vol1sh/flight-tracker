@@ -1,14 +1,10 @@
 package com.tracker.flight.controller;
 
+import com.tracker.flight.dto.ActiveFlightDto;
 import com.tracker.flight.dto.FlightResponseDto;
 import com.tracker.flight.dto.FlightStatusLogDto;
 import com.tracker.flight.service.FlightService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.ArraySchema;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,36 +22,21 @@ public class FlightController {
         this.flightService = flightService;
     }
 
+    @GetMapping("/active")
+    @Operation(summary = "Получить список активных рейсов в воздухе прямо сейчас")
+    public ResponseEntity<List<ActiveFlightDto>> getActiveFlights() {
+        return ResponseEntity.ok(flightService.getActiveFlights());
+    }
+
     @GetMapping("/{flightIata}")
-    @Operation(
-            summary = "Получить актуальный статус рейса",
-            description = "Возвращает данные о рейсе с задержкой. Ответ кэшируется в Redis на 3 мин и защищен Circuit Breaker.",
-            responses = {
-                    @ApiResponse(responseCode = "200", description = "Данные о рейсе успешно получены",
-                            content = @Content(schema = @Schema(implementation = FlightResponseDto.class))),
-                    @ApiResponse(responseCode = "500", description = "Внутренняя ошибка сервера")
-            }
-    )
-    public ResponseEntity<FlightResponseDto> getFlightStatus(
-            @Parameter(description = "IATA-номер рейса", example = "SU-100")
-            @PathVariable String flightIata
-    ) {
+    @Operation(summary = "Получить актуальный статус рейса")
+    public ResponseEntity<FlightResponseDto> getFlightStatus(@PathVariable String flightIata) {
         return ResponseEntity.ok(flightService.syncAndGetFlight(flightIata.toUpperCase()));
     }
 
     @GetMapping("/{flightIata}/history")
-    @Operation(
-            summary = "Получить историю аудита изменений рейса",
-            description = "Возвращает временной ряд изменений статусов и задержек для предиктивной аналитики",
-            responses = {
-                    @ApiResponse(responseCode = "200", description = "История аудита получена",
-                            content = @Content(array = @ArraySchema(schema = @Schema(implementation = FlightStatusLogDto.class))))
-            }
-    )
-    public ResponseEntity<List<FlightStatusLogDto>> getFlightHistory(
-            @Parameter(description = "IATA-номер рейса", example = "SU-100")
-            @PathVariable String flightIata
-    ) {
+    @Operation(summary = "Получить историю аудита изменений рейса")
+    public ResponseEntity<List<FlightStatusLogDto>> getFlightHistory(@PathVariable String flightIata) {
         return ResponseEntity.ok(flightService.getFlightHistory(flightIata.toUpperCase()));
     }
 }

@@ -50,10 +50,12 @@ services:
         condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/flight_tracker_db
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-tracker_user}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-tracker_secret}
+      SPRING_DATASOURCE_USERNAME: tracker_user
+      SPRING_DATASOURCE_PASSWORD: tracker_secret
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      AVIATION_API_BASE_URL: ${AVIATION_API_BASE_URL:-http://api.aviationstack.com/v1}
+      AVIATION_API_KEY: ${AVIATION_API_KEY:-}
     networks:
       - flight_network
 

@@ -9,11 +9,23 @@ public class FlightResponseDto {
     @Schema(description = "IATA-код рейса", example = "SU-100")
     private String flightIata;
 
-    @Schema(description = "Аэропорт вылета (IATA)", example = "SVO")
+    @Schema(description = "IATA-код аэропорта вылета", example = "SVO")
     private String departureAirport;
 
-    @Schema(description = "Аэропорт прилета (IATA)", example = "LED")
+    @Schema(description = "Город вылета", example = "Москва")
+    private String departureCity;
+
+    @Schema(description = "Наименование аэропорта вылета", example = "Шереметьево")
+    private String departureAirportName;
+
+    @Schema(description = "IATA-код аэропорта прилета", example = "DXB")
     private String arrivalAirport;
+
+    @Schema(description = "Город прилета", example = "Дубай")
+    private String arrivalCity;
+
+    @Schema(description = "Наименование аэропорта прилета", example = "Международный аэропорт Дубай")
+    private String arrivalAirportName;
 
     @Schema(description = "Плановое время вылета (UTC)")
     private Instant scheduledDeparture;
@@ -41,13 +53,18 @@ public class FlightResponseDto {
 
     public FlightResponseDto() {}
 
-    public FlightResponseDto(String flightIata, String departureAirport, String arrivalAirport,
+    public FlightResponseDto(String flightIata, String departureAirport, String departureCity, String departureAirportName,
+                             String arrivalAirport, String arrivalCity, String arrivalAirportName,
                              Instant scheduledDeparture, Instant actualDeparture,
                              Instant scheduledArrival, Instant actualArrival,
                              String status, Integer delayMinutes, boolean isDegraded, Instant lastUpdated) {
         this.flightIata = flightIata;
         this.departureAirport = departureAirport;
+        this.departureCity = departureCity;
+        this.departureAirportName = departureAirportName;
         this.arrivalAirport = arrivalAirport;
+        this.arrivalCity = arrivalCity;
+        this.arrivalAirportName = arrivalAirportName;
         this.scheduledDeparture = scheduledDeparture;
         this.actualDeparture = actualDeparture;
         this.scheduledArrival = scheduledArrival;
@@ -65,7 +82,11 @@ public class FlightResponseDto {
     public static class Builder {
         private String flightIata;
         private String departureAirport;
+        private String departureCity;
+        private String departureAirportName;
         private String arrivalAirport;
+        private String arrivalCity;
+        private String arrivalAirportName;
         private Instant scheduledDeparture;
         private Instant actualDeparture;
         private Instant scheduledArrival;
@@ -77,7 +98,11 @@ public class FlightResponseDto {
 
         public Builder flightIata(String flightIata) { this.flightIata = flightIata; return this; }
         public Builder departureAirport(String departureAirport) { this.departureAirport = departureAirport; return this; }
+        public Builder departureCity(String departureCity) { this.departureCity = departureCity; return this; }
+        public Builder departureAirportName(String departureAirportName) { this.departureAirportName = departureAirportName; return this; }
         public Builder arrivalAirport(String arrivalAirport) { this.arrivalAirport = arrivalAirport; return this; }
+        public Builder arrivalCity(String arrivalCity) { this.arrivalCity = arrivalCity; return this; }
+        public Builder arrivalAirportName(String arrivalAirportName) { this.arrivalAirportName = arrivalAirportName; return this; }
         public Builder scheduledDeparture(Instant scheduledDeparture) { this.scheduledDeparture = scheduledDeparture; return this; }
         public Builder actualDeparture(Instant actualDeparture) { this.actualDeparture = actualDeparture; return this; }
         public Builder scheduledArrival(Instant scheduledArrival) { this.scheduledArrival = scheduledArrival; return this; }
@@ -88,42 +113,26 @@ public class FlightResponseDto {
         public Builder lastUpdated(Instant lastUpdated) { this.lastUpdated = lastUpdated; return this; }
 
         public FlightResponseDto build() {
-            return new FlightResponseDto(flightIata, departureAirport, arrivalAirport,
+            return new FlightResponseDto(flightIata, departureAirport, departureCity, departureAirportName,
+                    arrivalAirport, arrivalCity, arrivalAirportName,
                     scheduledDeparture, actualDeparture, scheduledArrival, actualArrival,
                     status, delayMinutes, isDegraded, lastUpdated);
         }
     }
 
     public String getFlightIata() { return flightIata; }
-    public void setFlightIata(String flightIata) { this.flightIata = flightIata; }
-
     public String getDepartureAirport() { return departureAirport; }
-    public void setDepartureAirport(String departureAirport) { this.departureAirport = departureAirport; }
-
+    public String getDepartureCity() { return departureCity; }
+    public String getDepartureAirportName() { return departureAirportName; }
     public String getArrivalAirport() { return arrivalAirport; }
-    public void setArrivalAirport(String arrivalAirport) { this.arrivalAirport = arrivalAirport; }
-
+    public String getArrivalCity() { return arrivalCity; }
+    public String getArrivalAirportName() { return arrivalAirportName; }
     public Instant getScheduledDeparture() { return scheduledDeparture; }
-    public void setScheduledDeparture(Instant scheduledDeparture) { this.scheduledDeparture = scheduledDeparture; }
-
     public Instant getActualDeparture() { return actualDeparture; }
-    public void setActualDeparture(Instant actualDeparture) { this.actualDeparture = actualDeparture; }
-
     public Instant getScheduledArrival() { return scheduledArrival; }
-    public void setScheduledArrival(Instant scheduledArrival) { this.scheduledArrival = scheduledArrival; }
-
     public Instant getActualArrival() { return actualArrival; }
-    public void setActualArrival(Instant actualArrival) { this.actualArrival = actualArrival; }
-
     public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-
     public Integer getDelayMinutes() { return delayMinutes; }
-    public void setDelayMinutes(Integer delayMinutes) { this.delayMinutes = delayMinutes; }
-
     public boolean isDegraded() { return isDegraded; }
-    public void setDegraded(boolean degraded) { isDegraded = degraded; }
-
     public Instant getLastUpdated() { return lastUpdated; }
-    public void setLastUpdated(Instant lastUpdated) { this.lastUpdated = lastUpdated; }
 }

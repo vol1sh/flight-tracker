@@ -5,12 +5,19 @@ import com.tracker.flight.repository.FlightRepository;
 import com.tracker.flight.service.FlightService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
+@ConditionalOnProperty(
+        prefix = "app.scheduler.flight-poller",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = false
+)
 public class FlightPollerScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(FlightPollerScheduler.class);
@@ -24,13 +31,9 @@ public class FlightPollerScheduler {
         this.flightService = flightService;
     }
 
-    /**
-     * Фоновая периодическая синхронизация активных рейсов.
-     * Интервал по умолчанию: 60 секунд.
-     */
     @Scheduled(
-            fixedDelayString = "${app.scheduler.flight-poller.fixed-delay-ms:60000}",
-            initialDelay = 10000
+            fixedDelayString = "${app.scheduler.flight-poller.fixed-delay-ms:86400000}",
+            initialDelay = 60000
     )
     public void pollActiveFlights() {
         List<Flight> activeFlights = flightRepository.findByStatusNotIn(TERMINAL_STATUSES);
