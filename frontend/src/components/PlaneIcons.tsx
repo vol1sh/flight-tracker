@@ -1,29 +1,32 @@
-/**
- * Иконки современного пассажирского авиалайнера.
- * Чистая аэродинамика вместо бумажного треугольника.
- */
+interface IconProps {
+  className?: string;
+}
 
-// Логотип лайнера — используется в шапке и заставке (направлен вверх-вправо для иконки)
-export function PlaneLogo({ className = "w-6 h-6" }: { className?: string }) {
+/** Plane icon pointing up-right — used in the splash logo and header. */
+export function PlaneLogo({ className }: IconProps) {
   return (
-    <svg viewBox="0 0 48 48" fill="currentColor" className={className}>
-      {/* Фюзеляж и крылья лайнера */}
-      <path d="M24 3C22.6 3 21.5 4.5 21.5 7.5V18.5L5 27V31L21.5 26.5V38.5L15.5 43.5V47L24 44.5L32.5 47V43.5L26.5 38.5V26.5L43 31V27L26.5 18.5V7.5C26.5 4.5 25.4 3 24 3Z" />
-      {/* Левая турбина */}
-      <rect x="15" y="22.5" width="2" height="6.5" rx="1" opacity="0.85" />
-      {/* Правая турбина */}
-      <rect x="31" y="22.5" width="2" height="6.5" rx="1" opacity="0.85" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5Z" />
     </svg>
   );
 }
 
-// Лайнер для дуги маршрута (ориентирован вдоль горизонтальной траектории полёта)
-export function PlaneRoute({ className = "w-7 h-7" }: { className?: string }) {
+/** Plane icon rotated for the route arc — points right along the flight path. */
+export function PlaneRoute({ className }: IconProps) {
   return (
-    <svg viewBox="0 0 48 48" fill="currentColor" className={className} style={{ transform: 'rotate(90deg)' }}>
-      <path d="M24 3C22.6 3 21.5 4.5 21.5 7.5V18.5L5 27V31L21.5 26.5V38.5L15.5 43.5V47L24 44.5L32.5 47V43.5L26.5 38.5V26.5L43 31V27L26.5 18.5V7.5C26.5 4.5 25.4 3 24 3Z" />
-      <rect x="15" y="22.5" width="2" height="6.5" rx="1" opacity="0.85" />
-      <rect x="31" y="22.5" width="2" height="6.5" rx="1" opacity="0.85" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ transform: 'rotate(90deg)' }}
+    >
+      <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5Z" />
     </svg>
   );
 }

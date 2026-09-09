@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-mono: 'IBM Plex Mono', 'Menlo', monospace;
-
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --color-brand-50: #eff6ff;
   --color-brand-100: #dbeafe;
   --color-brand-500: #3b82f6;
   --color-brand-600: #2563eb;
   --color-brand-700: #1d4ed8;
-
   --animate-float: float 3s ease-in-out infinite;
-  --animate-plane-route: planeRoute 3s ease-in-out infinite;
+  --animate-fade-in-up: fadeInUp 0.5s ease-out both;
+  --animate-fade-in-up-d1: fadeInUp 0.5s ease-out 0.1s both;
+  --animate-fade-in-up-d2: fadeInUp 0.5s ease-out 0.2s both;
 }
 
 html {
@@ -29,124 +29,396 @@ body {
 /* ── Фоновая координатная сетка ── */
 .bg-aviation-grid {
   background-image:
-    radial-gradient(at 15% 0%, rgba(37, 99, 235, 0.035) 0px, transparent 50%),
-    radial-gradient(at 85% 100%, rgba(14, 165, 233, 0.025) 0px, transparent 50%),
+    radial-gradient(at 15% 0%, rgba(37, 99, 235, 0.04) 0px, transparent 50%),
+    radial-gradient(at 85% 100%, rgba(14, 165, 233, 0.03) 0px, transparent 50%),
     linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
   background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
 }
 
-/* ═══════════════════════════════════
-   КИРЕМАТИЧЕСКАЯ ЗАСТАВКА (SPLASH)
-   ═══════════════════════════════════ */
-
-/* Самолёт совершает динамический разворот и влетает в центр иконки */
-@keyframes planeBankingEntry {
-  0% {
-    transform: translate(-160px, 220px) rotate(-15deg) scale(0.35);
-    opacity: 0;
-    filter: blur(2px);
-  }
-  20% {
-    opacity: 1;
-    filter: blur(0px);
-  }
-  50% {
-    transform: translate(-50px, 40px) rotate(-35deg) scale(1.15);
-  }
-  80% {
-    transform: translate(6px, -6px) rotate(-48deg) scale(1.03);
-  }
-  92% {
-    transform: translate(-2px, 2px) rotate(-44deg) scale(0.98);
-  }
-  100% {
-    transform: translate(0, 0) rotate(-45deg) scale(1);
-    opacity: 1;
-  }
-}
-
-/* Контейнер иконки материализуется и принимает самолёт */
-@keyframes appBoxDock {
-  0% {
-    transform: scale(0.85);
-    opacity: 0;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
-  }
-  60% {
-    transform: scale(0.95);
-    opacity: 0.9;
-  }
-  85% {
-    transform: scale(1.04);
-    box-shadow: 0 16px 36px -4px rgba(37, 99, 235, 0.45);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-    box-shadow: 0 12px 28px -4px rgba(37, 99, 235, 0.3);
-  }
-}
-
-/* Импульсная волна при стыковке в иконку */
-@keyframes dockWave {
-  0% {
-    transform: scale(0.95);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1.75);
-    opacity: 0;
-  }
-}
-
-/* Появление названия сервиса */
-@keyframes entranceText {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Плавный уход заставки */
-@keyframes splashExit {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.02);
-  }
-}
-
-/* ═══════════════════════════════════
-   МАРШРУТ И ШАПКА
-   ═══════════════════════════════════ */
+/* ── Пунктирная траектория на карточке рейса ── */
 .route-dash {
   stroke-dasharray: 6 6;
   animation: routeDash 1.2s linear infinite;
 }
 
 @keyframes routeDash {
-  to { stroke-dashoffset: -24; }
+  to {
+    stroke-dashoffset: -24;
+  }
 }
 
-@keyframes planeRoute {
-  0%, 100% { transform: translate(-50%, -50%) translateY(0); }
-  50% { transform: translate(-50%, -50%) translateY(-3.5px); }
-}
-
+/* ── Покачивание логотипа в шапке ── */
 @keyframes float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-2px) rotate(1deg); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-2px);
+  }
 }
 
-/* ── Скроллбар ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+/* ── Появление блоков ── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Заставка (Splash Screen) — «Взлёт» ── */
+/* Появление огня взлётной полосы */
+@keyframes runwayLightIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Исчезновение полосы */
+@keyframes runwayFadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+/* Главная траектория полёта (снизу → центр) */
+@keyframes planeFlight {
+  0% {
+    transform: translateY(180px) scale(0.35);
+    opacity: 0;
+  }
+
+  8% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Имитация полёта: рыскание + турбулентность */
+@keyframes flightOscillate {
+
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  12% {
+    transform: translate(1.5px, -0.5px) rotate(1.2deg);
+  }
+
+  25% {
+    transform: translate(0.5px, 0.8px) rotate(-0.5deg);
+  }
+
+  37% {
+    transform: translate(-1.5px, -0.3px) rotate(-1deg);
+  }
+
+  50% {
+    transform: translate(-0.5px, 0.5px) rotate(0.8deg);
+  }
+
+  62% {
+    transform: translate(1px, -0.8px) rotate(-0.7deg);
+  }
+
+  75% {
+    transform: translate(-0.8px, 0.3px) rotate(1deg);
+  }
+
+  87% {
+    transform: translate(0.3px, -0.5px) rotate(-0.3deg);
+  }
+}
+
+/* Затухание самолёта */
+@keyframes planeFadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+/* Импульсное кольцо в центре */
+@keyframes centerPulse {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+
+  30% {
+    opacity: 0.45;
+  }
+
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Логотип-квадрат: из размытия в чёткость */
+@keyframes logoSquareReveal {
+  0% {
+    opacity: 0;
+    filter: blur(10px);
+    transform: scale(0.85);
+  }
+
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: scale(1);
+  }
+}
+
+/* Волна от логотипа */
+@keyframes logoWave {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* Текст reveal через clip-path */
+@keyframes textClipReveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    clip-path: inset(0 0% 0 0);
+  }
+}
+
+/* Появление подзаголовка */
+@keyframes entranceText {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Выход заставки вверх */
+@keyframes splashSlideUp {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-40px);
+  }
+}
+
+/* ── Радарная развёртка (sweep) ── */
+@keyframes radarSweep {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-sweep {
+  animation: radarSweep 4s linear infinite;
+  transform-origin: center center;
+}
+
+/* ── Мерцание блипа самолёта (ping при прохождении луча) ── */
+@keyframes blipPing {
+
+  0%,
+  100% {
+    opacity: 0.55;
+    filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.3));
+  }
+
+  15% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.9));
+  }
+
+  40% {
+    opacity: 0.85;
+    filter: drop-shadow(0 0 5px rgba(37, 99, 235, 0.5));
+  }
+}
+
+/* ── Движение самолётов-блипов по своим маршрутам ── */
+@keyframes blipMove1 {
+  0% {
+    transform: translate(0px, 0px);
+  }
+
+  25% {
+    transform: translate(6px, -4px);
+  }
+
+  50% {
+    transform: translate(12px, -2px);
+  }
+
+  75% {
+    transform: translate(8px, 3px);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+@keyframes blipMove2 {
+  0% {
+    transform: translate(0px, 0px);
+  }
+
+  25% {
+    transform: translate(-5px, 6px);
+  }
+
+  50% {
+    transform: translate(-10px, 4px);
+  }
+
+  75% {
+    transform: translate(-3px, -2px);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+@keyframes blipMove3 {
+  0% {
+    transform: translate(0px, 0px);
+  }
+
+  25% {
+    transform: translate(3px, 5px);
+  }
+
+  50% {
+    transform: translate(7px, 8px);
+  }
+
+  75% {
+    transform: translate(4px, 3px);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+@keyframes blipMove4 {
+  0% {
+    transform: translate(0px, 0px);
+  }
+
+  25% {
+    transform: translate(-4px, -6px);
+  }
+
+  50% {
+    transform: translate(-8px, -3px);
+  }
+
+  75% {
+    transform: translate(-2px, 2px);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+@keyframes blipMove5 {
+  0% {
+    transform: translate(0px, 0px);
+  }
+
+  25% {
+    transform: translate(5px, 2px);
+  }
+
+  50% {
+    transform: translate(3px, -5px);
+  }
+
+  75% {
+    transform: translate(-2px, -3px);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+/* ── Пульсация кольца-пинга ── */
+@keyframes radarPingRing {
+  0% {
+    r: 3;
+    opacity: 0.7;
+  }
+
+  100% {
+    r: 10;
+    opacity: 0;
+  }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

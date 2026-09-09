@@ -1,8 +1,9 @@
 package com.tracker.flight.dto;
 
-import java.io.Serializable;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-public class ActiveFlightDto implements Serializable {
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class ActiveFlightDto {
     private String callsign;
     private String airline;
     private String originIata;
@@ -10,7 +11,8 @@ public class ActiveFlightDto implements Serializable {
     private String destIata;
     private String destCity;
 
-    public ActiveFlightDto() {}
+    public ActiveFlightDto() {
+    }
 
     public ActiveFlightDto(String callsign, String airline, String originIata, String originCity, String destIata, String destCity) {
         this.callsign = callsign;
