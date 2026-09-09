@@ -31,7 +31,7 @@ management:
 app:
   aviation-api:
     base-url: ${AVIATION_API_BASE_URL:http://api.aviationstack.com/v1}
-    key: ${AVIATION_API_KEY:}
+    key: ${AVIATION_API_KEY:9b1f6092edaf3694e752b08f04c69280}
   scheduler:
     flight-poller:
       enabled: ${SCHEDULER_POLLER_ENABLED:false}
