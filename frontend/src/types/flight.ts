@@ -1,7 +1,11 @@
 export interface FlightResponse {
   flightIata: string;
   departureAirport: string;
+  departureCity?: string;
+  departureAirportName?: string;
   arrivalAirport: string;
+  arrivalCity?: string;
+  arrivalAirportName?: string;
   scheduledDeparture: string;
   actualDeparture: string | null;
   scheduledArrival: string;
@@ -18,4 +22,13 @@ export interface FlightStatusLog {
   newStatus: string;
   delayMinutes: number;
   recordedAt: string;
+}
+
+export interface ActiveFlight {
+  callsign: string;
+  airline: string;
+  originIata: string;
+  originCity: string;
+  destIata: string;
+  destCity: string;
 }

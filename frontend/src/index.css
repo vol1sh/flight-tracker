@@ -1,8 +1,152 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Menlo', monospace;
+
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+
+  --animate-float: float 3s ease-in-out infinite;
+  --animate-plane-route: planeRoute 3s ease-in-out infinite;
+}
+
+html {
+  font-size: 16px;
+}
 
 body {
-  margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: var(--font-sans);
+  background-color: #f7f9fc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── Фоновая координатная сетка ── */
+.bg-aviation-grid {
+  background-image:
+    radial-gradient(at 15% 0%, rgba(37, 99, 235, 0.035) 0px, transparent 50%),
+    radial-gradient(at 85% 100%, rgba(14, 165, 233, 0.025) 0px, transparent 50%),
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+}
+
+/* ═══════════════════════════════════
+   КИРЕМАТИЧЕСКАЯ ЗАСТАВКА (SPLASH)
+   ═══════════════════════════════════ */
+
+/* Самолёт совершает динамический разворот и влетает в центр иконки */
+@keyframes planeBankingEntry {
+  0% {
+    transform: translate(-160px, 220px) rotate(-15deg) scale(0.35);
+    opacity: 0;
+    filter: blur(2px);
+  }
+  20% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  50% {
+    transform: translate(-50px, 40px) rotate(-35deg) scale(1.15);
+  }
+  80% {
+    transform: translate(6px, -6px) rotate(-48deg) scale(1.03);
+  }
+  92% {
+    transform: translate(-2px, 2px) rotate(-44deg) scale(0.98);
+  }
+  100% {
+    transform: translate(0, 0) rotate(-45deg) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Контейнер иконки материализуется и принимает самолёт */
+@keyframes appBoxDock {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+  }
+  60% {
+    transform: scale(0.95);
+    opacity: 0.9;
+  }
+  85% {
+    transform: scale(1.04);
+    box-shadow: 0 16px 36px -4px rgba(37, 99, 235, 0.45);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 12px 28px -4px rgba(37, 99, 235, 0.3);
+  }
+}
+
+/* Импульсная волна при стыковке в иконку */
+@keyframes dockWave {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+/* Появление названия сервиса */
+@keyframes entranceText {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Плавный уход заставки */
+@keyframes splashExit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+/* ═══════════════════════════════════
+   МАРШРУТ И ШАПКА
+   ═══════════════════════════════════ */
+.route-dash {
+  stroke-dasharray: 6 6;
+  animation: routeDash 1.2s linear infinite;
+}
+
+@keyframes routeDash {
+  to { stroke-dashoffset: -24; }
+}
+
+@keyframes planeRoute {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0); }
+  50% { transform: translate(-50%, -50%) translateY(-3.5px); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-2px) rotate(1deg); }
+}
+
+/* ── Скроллбар ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
