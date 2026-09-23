@@ -49,67 +49,44 @@
 ------------------------------------------------------------------------
 
 # 2. C4 Model
+Диаграммы представлены в нотации C4 (Context / Container level) с использованием синтаксиса Mermaid `flowchart`, так как плагин `C4Context`/`C4Container` не рендерится стабильно в предпросмотре GitHub.
+
 ## Context Diagram
-``` mermaid
-C4Context
+```mermaid
+flowchart TB
+    passenger["Пассажир<br/>Просматривает статус рейса"]
+    greeter["Встречающий<br/>Следит за изменениями рейса"]
+    analyst["Аналитик<br/>Оценивает надежность маршрутов"]
+    tracker["Flight Delay Tracker<br/>Агрегация статусов рейсов, хранение истории и анализ задержек"]
+    api["AviationStack API<br/>Внешний источник информации о рейсах"]
 
-Person(passenger, "Пассажир", "Просматривает статус рейса")
-Person(greeter, "Встречающий", "Следит за изменениями рейса")
-Person(analyst, "Аналитик", "Оценивает надежность маршрутов")
-
-System(tracker, "Flight Delay Tracker",
-"Агрегация статусов рейсов, хранение истории и анализ задержек")
-
-System_Ext(api, "AviationStack API",
-"Внешний источник информации о рейсах")
-
-Rel(passenger, tracker, "Запрашивает данные", "HTTPS REST")
-Rel(greeter, tracker, "Получает изменения", "HTTPS REST")
-Rel(analyst, tracker, "Получает статистику", "HTTPS REST")
-Rel(tracker, api, "Получает данные рейсов", "HTTPS REST")
+    passenger -->|HTTPS REST| tracker
+    greeter -->|HTTPS REST| tracker
+    analyst -->|HTTPS REST| tracker
+    tracker -->|HTTPS REST| api
 ```
 
 ------------------------------------------------------------------------
 
 ## Container Diagram
-``` mermaid
-C4Container
+```mermaid
+flowchart TB
+    user["Пользователь"]
 
-Person(user, "Пользователь")
+    subgraph system["Flight Delay Tracker"]
+        frontend["Frontend SPA<br/>JavaScript<br/>Пользовательский интерфейс"]
+        backend["Backend API<br/>Java Spring Boot<br/>REST API, бизнес-логика, Circuit Breaker"]
+        postgres[("PostgreSQL<br/>Database<br/>Хранение рейсов и истории")]
+        redis[("Redis<br/>Cache<br/>Кэширование внешних запросов")]
+    end
 
-System_Boundary(system, "Flight Delay Tracker") {
+    api["AviationStack API<br/>Внешний сервис"]
 
-Container(frontend,
-"Frontend SPA",
-"JavaScript",
-"Пользовательский интерфейс")
-
-Container(backend,
-"Backend API",
-"Java Spring Boot",
-"REST API, бизнес-логика, Circuit Breaker")
-
-ContainerDb(postgres,
-"PostgreSQL",
-"Database",
-"Хранение рейсов и истории")
-
-ContainerDb(redis,
-"Redis",
-"Cache",
-"Кэширование внешних запросов")
-
-}
-
-System_Ext(api,
-"AviationStack API",
-"Внешний сервис")
-
-Rel(user, frontend, "HTTPS")
-Rel(frontend, backend, "REST API")
-Rel(backend, postgres, "JDBC")
-Rel(backend, redis, "Cache")
-Rel(backend, api, "HTTPS REST")
+    user -->|HTTPS| frontend
+    frontend -->|REST API| backend
+    backend -->|JDBC| postgres
+    backend -->|Cache| redis
+    backend -->|HTTPS REST| api
 ```
 
 ------------------------------------------------------------------------
@@ -173,7 +150,7 @@ Availability ≥99.5%
 
 # 5. Проектирование данных
 ## ER Diagram
-``` mermaid
+```mermaid
 erDiagram
 
 FLIGHTS ||--o{ FLIGHT_STATUS_LOGS : contains
@@ -203,7 +180,7 @@ timestamp recorded_at
 # 5.1 Индексы базы данных
 ## Поиск рейса
 
-``` sql
+```sql
 CREATE INDEX idx_flights_iata
 ON flights(flight_iata);
 ```
@@ -213,7 +190,7 @@ ON flights(flight_iata);
 
 ## Получение истории
 
-``` sql
+```sql
 CREATE INDEX idx_status_logs_flight_time
 ON flight_status_logs(
 flight_id,
@@ -226,7 +203,7 @@ recorded_at DESC
 
 ## Расчет рейтинга
 
-``` sql
+```sql
 CREATE INDEX idx_status_logs_status
 ON flight_status_logs(
 flight_id,
