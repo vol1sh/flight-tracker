@@ -98,12 +98,13 @@ $$
 ## 1.2 Read/Write нагрузка
   Тип операции                 Доля
   ---------------------------- ------
-  Получение статуса рейса      70%
-  Получение истории            20%
-  Расчет рейтинга надежности   5%
-  Обновление данных            5%
+  Получение статуса рейса:      70%
+  Получение истории:            20%
+  Расчет рейтинга надежности:   5%
+  Обновление данных:            5%
 
-Итог: Read : Write = 95 : 5 ≈ 19 : 1
+Итог: Read : Write = 95 : 5 
+≈ 19 : 1
 
 # 1.3 Расчет сетевого трафика
 - Средний размер ответа: FlightResponseDto ≈ 500-600 байт
@@ -169,12 +170,12 @@ Rel(backend, api, "Получает данные рейсов", "HTTPS REST")
 
 # 3. API Contracts
 ## Получение активных рейсов
-GET /api/v1/flights/active
+GET /api /v1 /flights /active
 
 Latency: p95 < 300 ms
 
 ## Получение статуса рейса
-GET /api/v1/flights/{flightIata}
+GET /api /v1 /flights /{flightIata}
 
 Порядок получения:
     Redis Cache
@@ -190,7 +191,7 @@ Cache hit: <300 ms
 External API: <1.5 sec
 
 ## Получение истории рейса
-GET /api/v1/flights/{flightIata}/history
+GET /api /v1 /flights /{flightIata} /history
 
 Latency: p95 < 500 ms
 
