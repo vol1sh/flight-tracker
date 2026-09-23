@@ -130,18 +130,15 @@ $$
 
 # 2. C4 Model
 ## Context Diagram
-``` mermaid
+```mermaid
 C4Context
 
 Person(passenger, "Пассажир", "Просматривает статус рейса")
 Person(greeter, "Встречающий", "Следит за изменениями рейса")
 Person(analyst, "Аналитик", "Оценивает надежность маршрутов")
 
-System(tracker, "Flight Delay Tracker",
-"Агрегация статусов рейсов, хранение истории и анализ задержек")
-
-System_Ext(api, "AviationStack API",
-"Внешний источник информации о рейсах")
+System(tracker, "Flight Delay Tracker", "Агрегация статусов рейсов, хранение истории и анализ задержек")
+System_Ext(api, "AviationStack API", "Внешний источник информации о рейсах")
 
 Rel(passenger, tracker, "Запрашивает данные", "HTTPS REST")
 Rel(greeter, tracker, "Получает изменения", "HTTPS REST")
@@ -150,44 +147,24 @@ Rel(tracker, api, "Получает данные рейсов", "HTTPS REST")
 ```
 
 ## Container Diagram
-``` mermaid
+```mermaid
 C4Container
 
 Person(user, "Пользователь")
+System_Ext(api, "AviationStack API", "Внешний сервис")
 
 System_Boundary(system, "Flight Delay Tracker") {
-
-Container(frontend,
-"Frontend SPA",
-"JavaScript",
-"Пользовательский интерфейс")
-
-Container(backend,
-"Backend API",
-"Java Spring Boot",
-"REST API, бизнес-логика, Circuit Breaker")
-
-ContainerDb(postgres,
-"PostgreSQL",
-"Database",
-"Хранение рейсов и истории")
-
-ContainerDb(redis,
-"Redis",
-"Cache",
-"Кэширование внешних запросов")
-
+    Container(frontend, "Frontend SPA", "JavaScript", "Пользовательский интерфейс")
+    Container(backend, "Backend API", "Java Spring Boot", "REST API, бизнес-логика, Circuit Breaker")
+    ContainerDb(postgres, "PostgreSQL", "Database", "Хранение рейсов и истории")
+    ContainerDb(redis, "Redis", "Cache", "Кэширование внешних запросов")
 }
 
-System_Ext(api,
-"AviationStack API",
-"Внешний сервис")
-
-Rel(user, frontend, "HTTPS")
-Rel(frontend, backend, "REST API")
-Rel(backend, postgres, "JDBC")
-Rel(backend, redis, "Cache")
-Rel(backend, api, "HTTPS REST")
+Rel(user, frontend, "Использует", "HTTPS")
+Rel(frontend, backend, "Запрашивает данные", "REST API")
+Rel(backend, postgres, "Читает и записывает данные", "JDBC")
+Rel(backend, redis, "Читает и записывает кэш", "Redis")
+Rel(backend, api, "Получает данные рейсов", "HTTPS REST")
 ```
 
 # 3. API Contracts
