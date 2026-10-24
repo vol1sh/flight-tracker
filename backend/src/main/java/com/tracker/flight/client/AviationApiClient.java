@@ -30,22 +30,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Клиент внешнего AviationStack API.
- *
- * Зона ответственности Боба (Б-1..Б-5):
- *  - Б-1: ключ и base-url больше не зашиты в код, берутся только из окружения.
- *  - Б-2: добавлен date-aware метод fetchLiveFlight(iata, date). Старый метод
- *    fetchLiveFlight(iata) оставлен для обратной совместимости, чтобы не ломать
- *    сборку на ветке Ильи (И-1) до момента совместной интеграции — см. README
- *    раздел "Известные ограничения по дате" ниже.
- *  - Б-3: ошибки сети/сервера/квоты/доступа теперь различаются отдельными
- *    исключениями вместо общего null.
- *  - Б-4: разбор времени больше не обрезает строку вслепую; порядок определения
- *    статуса исправлен (CANCELLED проверяется раньше ACTIVE).
- *  - Б-5: кэш-ключ для рейса с датой включает дату, чтобы разные даты одного
- *    номера рейса не путались в Redis.
- */
+// Клиент AviationStack API. Зона ответственности Боба: Б-1..Б-5 (ключ из env, дата, ошибки, время/статус, кэш-ключ).
 @Component
 public class AviationApiClient {
 
@@ -115,10 +100,7 @@ public class AviationApiClient {
         }
     }
 
-    /**
-     * Старый метод без даты. Оставлен для обратной совместимости с текущим
-     * FlightService (пока Илья не переключит его на date-aware версию в И-1).
-     */
+    // Без даты, оставлен для совместимости пока Илья не переключит FlightService (И-1).
     @Cacheable(
             value = RedisConfig.FLIGHTS_CACHE,
             key = "#flightIata",
@@ -129,15 +111,7 @@ public class AviationApiClient {
         return fetchLiveFlightInternal(flightIata, null);
     }
 
-    /**
-     * Б-2: поиск рейса на конкретную дату.
-     *
-     * Важно: бесплатный тариф AviationStack может не поддерживать фильтр
-     * flight_date (ошибка function_access_restricted). В этом случае метод
-     * НЕ подставляет случайный рейс из выдачи — он либо находит точное
-     * совпадение по дате в неотфильтрованном ответе, либо кидает 404 с явным
-     * сообщением об ограничении тарифа.
-     */
+    // Б-2: поиск по дате. Если тариф не поддерживает flight_date — не подставляем случайный рейс, а ищем точное совпадение сами.
     @Cacheable(
             value = RedisConfig.FLIGHTS_CACHE,
             key = "#flightIata + ':' + #flightDate",
@@ -168,9 +142,8 @@ public class AviationApiClient {
                     response = executeQuery(secondaryParam, cleanFlight, flightDate);
                 }
             } catch (AviationAccessException e) {
-                // Тариф не поддерживает flight_date — не считаем это "рейс не найден".
-                log.warn("Фильтр flight_date недоступен на текущем тарифе AviationStack ({}). " +
-                        "Повторяем запрос без фильтра и ищем совпадение по дате на стороне клиента.", e.getMessage());
+                // Тариф не поддерживает flight_date — повторяем без фильтра и ищем дату сами.
+                log.warn("Фильтр flight_date недоступен на текущем тарифе AviationStack ({}).", e.getMessage());
                 dateFilterRejected = true;
                 response = executeQuery(primaryParam, cleanFlight, null);
                 if (response == null || response.getData() == null || response.getData().isEmpty()) {
@@ -200,7 +173,7 @@ public class AviationApiClient {
 
             if (matched == null) {
                 String reason = dateFilterRejected
-                        ? "дата " + flightDate + " недоступна на текущем тарифе поставщика (нет поддержки произвольных дат)"
+                        ? "дата " + flightDate + " недоступна на текущем тарифе поставщика"
                         : "на дату " + flightDate + " данных нет";
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Рейс " + cleanFlight + ": " + reason);
@@ -226,6 +199,7 @@ public class AviationApiClient {
                     .retrieve()
                     .body(AviationStackDto.class);
         } catch (HttpStatusCodeException e) {
+            // Б-3: различаем сетевые/серверные ошибки, квоту и доступ вместо общего null.
             HttpStatusCode status = e.getStatusCode();
             if (status == HttpStatus.UNAUTHORIZED || status == HttpStatus.FORBIDDEN) {
                 throw new AviationAccessException("Ошибка авторизации/доступа AviationStack: HTTP " + status.value());
@@ -236,16 +210,14 @@ public class AviationApiClient {
             if (status.is5xxServerError()) {
                 throw new AviationApiUnavailableException("AviationStack вернул серверную ошибку HTTP " + status.value(), e);
             }
-            // Прочие 4xx — не выдаём молча null, трактуем как недоступность сервиса,
-            // чтобы сервис-вызывающая сторона не спутала это с "рейс не найден".
             throw new AviationApiUnavailableException("Неожиданный HTTP-статус от AviationStack: " + status.value(), e);
         } catch (ResourceAccessException e) {
-            // Таймаут или сетевая ошибка
             throw new AviationApiUnavailableException("AviationStack недоступен (таймаут/сеть): " + e.getMessage(), e);
         } catch (Exception e) {
             throw new AviationApiUnavailableException("Не удалось разобрать ответ AviationStack: " + e.getMessage(), e);
         }
 
+        // AviationStack иногда шлёт HTTP 200 с телом {"error": {...}} — проверяем это отдельно.
         if (body != null && body.getError() != null) {
             String code = body.getError().getCode();
             String message = body.getError().getMessage();
@@ -262,13 +234,7 @@ public class AviationApiClient {
         return body;
     }
 
-    /**
-     * Circuit Breaker fallback для fetchLiveFlight(iata).
-     * Подтверждённое "не найдено" прокидываем дальше как есть — это не сбой.
-     * Любой другой сбой (сеть, 5xx, квота, доступ) превращаем в контролируемый
-     * деградированный ответ, который FlightService уже умеет распознавать
-     * по fallbackData=true и не путает с достоверными данными.
-     */
+    // Подтверждённое "не найдено" прокидываем дальше, остальные сбои превращаем в degraded-ответ.
     public ExternalFlightDto fallbackGetFlightStatus(String flightIata, Throwable throwable) {
         if (throwable instanceof ResponseStatusException rse && rse.getStatusCode() == HttpStatus.NOT_FOUND) {
             throw rse;
@@ -282,7 +248,7 @@ public class AviationApiClient {
                 .build();
     }
 
-    /** То же самое для date-aware перегрузки — сигнатура должна совпадать с основным методом + Throwable. */
+    // Та же логика для date-aware метода — сигнатура должна совпадать с основным + Throwable.
     public ExternalFlightDto fallbackGetFlightStatusWithDate(String flightIata, LocalDate flightDate, Throwable throwable) {
         if (throwable instanceof ResponseStatusException rse && rse.getStatusCode() == HttpStatus.NOT_FOUND) {
             throw rse;
@@ -341,12 +307,7 @@ public class AviationApiClient {
                 .build();
     }
 
-    /**
-     * Б-4: порядок проверки исправлен — CANCELLED и LANDED проверяются раньше
-     * ACTIVE, чтобы отменённый рейс с неоднозначными данными не получал
-     * статус "в полёте".
-     * Порядок: CANCELLED → LANDED → ACTIVE/DELAYED → SCHEDULED → UNKNOWN.
-     */
+    // Б-4: CANCELLED/LANDED проверяются раньше ACTIVE, чтобы отменённый рейс не читался как "в полёте".
     private static String resolveStatus(String rawFlightStatus, int delayMinutes, Instant actualDeparture) {
         String raw = rawFlightStatus != null ? rawFlightStatus.toLowerCase() : "";
 
@@ -365,13 +326,7 @@ public class AviationApiClient {
         return "UNKNOWN";
     }
 
-    /**
-     * Б-4: раньше строка слепо обрезалась до 19 символов, из-за чего мог
-     * теряться UTC-офсет. Теперь порядок разбора:
-     *  1) если есть офсет — OffsetDateTime
-     *  2) если есть только локальное время — LocalDateTime + часовой пояс аэропорта
-     *  3) иначе — null (не подставляем Instant.now()).
-     */
+    // Б-4: сначала пробуем офсет (не теряем UTC-смещение), потом локальное время + таймзону аэропорта, иначе null.
     private static Instant parseAirportTimeToUtc(String isoString, String timezone) {
         if (isoString == null || isoString.isBlank()) {
             return null;
@@ -380,7 +335,7 @@ public class AviationApiClient {
         try {
             return OffsetDateTime.parse(isoString).toInstant();
         } catch (Exception ignoredOffset) {
-            // строка не содержит офсет — пробуем как локальное время аэропорта
+            // нет офсета — пробуем локальное время
         }
 
         try {
@@ -388,7 +343,7 @@ public class AviationApiClient {
             ZoneId zoneId = (timezone != null && !timezone.isBlank()) ? ZoneId.of(timezone) : ZoneId.of("UTC");
             return ldt.atZone(zoneId).toInstant();
         } catch (Exception ignoredLocal) {
-            // не распознали формат вовсе
+            // формат не распознан
         }
 
         try {
