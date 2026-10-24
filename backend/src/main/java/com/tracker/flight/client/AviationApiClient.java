@@ -180,7 +180,12 @@ public class AviationApiClient {
             }
         }
 
-        return mapToExternalDto(cleanFlight, matched);
+        ExternalFlightDto result = mapToExternalDto(cleanFlight, matched);
+
+        log.info("Рейс {}: source=AVIATIONSTACK, status={}, получен новый ответ поставщика",
+                cleanFlight, result.getStatus());
+
+        return result;
     }
 
     private AviationStackDto executeQuery(String paramName, String flightCode, LocalDate flightDate) {
