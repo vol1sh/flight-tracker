@@ -32,8 +32,8 @@ public class AviationApiClient {
     @Autowired
     public AviationApiClient(
             RestClient.Builder builder,
-            @Value("${app.aviation-api.base-url:http://api.aviationstack.com/v1}") String baseUrl,
-            @Value("${app.aviation-api.key:9b1f6092edaf3694e752b08f04c69280}") String apiKey
+            @Value("${app.aviation-api.base-url:https://api.aviationstack.com/v1}") String baseUrl,
+            @Value("${app.aviation-api.key:}") String apiKey
     ) {
         this.restClient = builder.baseUrl(baseUrl).build();
         this.apiKey = apiKey != null ? apiKey.trim() : "";
