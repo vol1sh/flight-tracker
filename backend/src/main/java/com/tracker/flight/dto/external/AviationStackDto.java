@@ -2,6 +2,7 @@ package com.tracker.flight.dto.external;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.time.LocalDate;
 import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -9,11 +10,30 @@ public class AviationStackDto {
 
     private List<FlightItem> data;
 
+    // AviationStack иногда возвращает HTTP 200 с телом {"error": {...}} вместо данных.
+    // Это нужно уметь отличать от "пустого, но успешного" результата.
+    private ApiError error;
+
     public List<FlightItem> getData() { return data; }
     public void setData(List<FlightItem> data) { this.data = data; }
+    public ApiError getError() { return error; }
+    public void setError(ApiError error) { this.error = error; }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ApiError {
+        private String code;
+        private String message;
+
+        public String getCode() { return code; }
+        public void setCode(String code) { this.code = code; }
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class FlightItem {
+        @JsonProperty("flight_date")
+        private LocalDate flightDate;
         @JsonProperty("flight_status")
         private String flightStatus;
         private AirportInfo departure;
@@ -21,6 +41,8 @@ public class AviationStackDto {
         private AirlineInfo airline;
         private FlightDetail flight;
 
+        public LocalDate getFlightDate() { return flightDate; }
+        public void setFlightDate(LocalDate flightDate) { this.flightDate = flightDate; }
         public String getFlightStatus() { return flightStatus; }
         public void setFlightStatus(String flightStatus) { this.flightStatus = flightStatus; }
         public AirportInfo getDeparture() { return departure; }
