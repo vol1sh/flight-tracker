@@ -55,7 +55,7 @@ public class FlightService {
         if (existingFlightOpt.isPresent()) {
             Flight existingFlight = existingFlightOpt.get();
             if (existingFlight.getStatus() != null && TERMINAL_STATUSES.contains(existingFlight.getStatus().toUpperCase())) {
-                log.info("Рейс {} в терминальном статусе '{}'. Отдаем из PostgreSQL.",
+                log.info("Рейс {}: source=DB, terminalStatus={}",
                         cleanFlight, existingFlight.getStatus());
                 return mapToFlightResponseDto(existingFlight, false);
             }
@@ -131,6 +131,19 @@ public class FlightService {
                     .build();
 
             logRepository.save(initialLog);
+        }
+
+        if (isDegradedFallback) {
+            if (existingFlightOpt.isPresent()) {
+                log.warn("Рейс {}: source=DB_FALLBACK, status={}, degraded=true",
+                        cleanFlight, flight.getStatus());
+            } else {
+                log.warn("Рейс {}: source=FALLBACK_PLACEHOLDER, status={}, degraded=true",
+                        cleanFlight, flight.getStatus());
+            }
+        } else {
+            log.info("Рейс {}: source=AVIATIONSTACK_OR_REDIS, status={}, degraded=false",
+                    cleanFlight, flight.getStatus());
         }
 
         return mapToFlightResponseDto(flight, isDegradedFallback);
