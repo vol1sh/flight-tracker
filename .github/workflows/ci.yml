@@ -2,9 +2,6 @@ name: Continuous Integration (CI)
 
 on:
   push:
-    branches:
-      - main
-      - Ilya
   pull_request:
     branches:
       - main
