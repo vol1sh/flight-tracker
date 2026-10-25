@@ -26,6 +26,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.tracker.flight.client.exception.AviationApiUnavailableException;
+
+
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit-тестирование бизнес-логики FlightService")
 class FlightServiceTest {
@@ -157,6 +160,44 @@ class FlightServiceTest {
                         exception -> assertThat(exception.getStatusCode().value())
                                 .isEqualTo(503)
                 );
+
+        verify(flightRepository, never()).save(any(Flight.class));
+        verifyNoInteractions(logRepository);
+    }
+
+    @Test
+    @DisplayName("При сбое API возвращаются сохранённые данные без изменения")
+    void apiFailure_ShouldReturnSavedFlightWithoutSaving() {
+        Instant departure = Instant.parse("2026-10-24T10:00:00Z");
+        Instant arrival = Instant.parse("2026-10-24T18:00:00Z");
+        Instant lastUpdated = Instant.parse("2026-10-24T09:50:00Z");
+
+        Flight savedFlight = Flight.builder()
+                .id(1L)
+                .flightIata("SU100")
+                .departureIata("SVO")
+                .arrivalIata("JFK")
+                .scheduledDepartureTime(departure)
+                .scheduledArrivalTime(arrival)
+                .status("DELAYED")
+                .delayMinutes(35)
+                .updatedAt(lastUpdated)
+                .build();
+
+        when(flightRepository.findByFlightIata("SU100"))
+                .thenReturn(Optional.of(savedFlight));
+
+        when(aviationApiClient.fetchLiveFlight("SU100"))
+                .thenThrow(new AviationApiUnavailableException("Test timeout"));
+
+        FlightResponseDto response = flightService.syncAndGetFlight("SU100");
+
+        assertThat(response.isDegraded()).isTrue();
+        assertThat(response.getStatus()).isEqualTo("DELAYED");
+        assertThat(response.getDelayMinutes()).isEqualTo(35);
+        assertThat(response.getScheduledDeparture()).isEqualTo(departure);
+        assertThat(response.getScheduledArrival()).isEqualTo(arrival);
+        assertThat(response.getLastUpdated()).isEqualTo(lastUpdated);
 
         verify(flightRepository, never()).save(any(Flight.class));
         verifyNoInteractions(logRepository);
