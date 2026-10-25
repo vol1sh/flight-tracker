@@ -139,8 +139,9 @@ public class AviationApiClient {
         if (flightDate != null) {
             try {
                 items = queryBothCodes(primaryParam, secondaryParam, cleanFlight, flightDate);
-            } catch (AviationAccessException e) {
+            } catch (DateFilterNotAllowedException e) {
                 // Тариф не поддерживает flight_date — повторяем без фильтра и ищем дату сами.
+                // Любой другой AviationAccessException (неверный ключ, 401/403 без этого кода) сюда не попадает.
                 log.warn("Фильтр flight_date недоступен на текущем тарифе AviationStack ({}).", e.getMessage());
                 dateFilterRejected = true;
                 items = queryBothCodes(primaryParam, secondaryParam, cleanFlight, null);
@@ -213,7 +214,8 @@ public class AviationApiClient {
             // Б-3: различаем сетевые/серверные ошибки, квоту и доступ вместо общего null.
             HttpStatusCode status = e.getStatusCode();
             if (status == HttpStatus.UNAUTHORIZED || status == HttpStatus.FORBIDDEN) {
-                throw new AviationAccessException("Ошибка авторизации/доступа AviationStack: HTTP " + status.value());
+                String errorCode = extractErrorCode(e.getResponseBodyAsString());
+                throw accessException(errorCode, "HTTP " + status.value(), flightDate != null);
             }
             if (status.value() == 429) {
                 throw new AviationRateLimitException("Превышен лимит запросов AviationStack (HTTP 429)");
@@ -242,7 +244,7 @@ public class AviationApiClient {
             }
             if (c.contains("access_restricted") || c.contains("invalid_access_key")
                     || c.contains("missing_access_key") || c.contains("inactive_user")) {
-                throw new AviationAccessException("AviationStack error: " + code + " — " + message);
+                throw accessException(code, message, flightDate != null);
             }
             throw new AviationApiUnavailableException("AviationStack error: " + code + " — " + message);
         }
@@ -252,6 +254,34 @@ public class AviationApiClient {
             throw new AviationApiUnavailableException("AviationStack вернул ответ без поля data");
         }
         return body.getData();
+    }
+
+    /**
+     * Ограничение именно фильтра flight_date на тарифе (function_access_restricted при запросе с датой).
+     * Только для него клиент повторяет запрос без даты; остальные ошибки доступа — обычный AviationAccessException.
+     */
+    private static final class DateFilterNotAllowedException extends AviationAccessException {
+        DateFilterNotAllowedException(String message) {
+            super(message);
+        }
+    }
+
+    private static AviationAccessException accessException(String errorCode, String details, boolean dateQuery) {
+        String text = "Ошибка доступа AviationStack: " + errorCode + " (" + details + ")";
+        if (dateQuery && errorCode != null && errorCode.toLowerCase().contains("function_access_restricted")) {
+            return new DateFilterNotAllowedException(text);
+        }
+        return new AviationAccessException(text);
+    }
+
+    // Достаёт "code" из тела ошибки {"error":{"code":"...","message":"..."}}; null, если тела/кода нет.
+    private static String extractErrorCode(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\"code\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+        return m.find() ? m.group(1) : null;
     }
 
     // Фолбэк больше НЕ создаёт заглушку: превращает любой сбой в типизированное исключение по контракту.
