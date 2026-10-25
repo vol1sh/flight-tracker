@@ -13,6 +13,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.tracker.flight.client.exception.AviationAccessException;
+import com.tracker.flight.client.exception.AviationApiUnavailableException;
+import com.tracker.flight.client.exception.AviationRateLimitException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.Collections;
@@ -62,10 +68,24 @@ public class FlightService {
         }
 
         // 2. Запрос во внешнее API (или Fallback при сбое)
-        ExternalFlightDto externalDto = aviationApiClient.fetchLiveFlight(cleanFlight);
+        ExternalFlightDto externalDto;
+
+        try {
+            externalDto = aviationApiClient.fetchLiveFlight(cleanFlight);
+        } catch (AviationApiUnavailableException | AviationAccessException
+                 | AviationRateLimitException | CallNotPermittedException exception) {
+            return returnSavedFlightOr503(cleanFlight, existingFlightOpt);
+        }
 
         Flight flight;
-        boolean isDegradedFallback = externalDto.isFallbackData() || "UNKNOWN_DEGRADED".equalsIgnoreCase(externalDto.getStatus());
+
+        boolean isDegradedFallback = externalDto == null
+                || externalDto.isFallbackData()
+                || "UNKNOWN_DEGRADED".equalsIgnoreCase(externalDto.getStatus());
+
+        if (isDegradedFallback) {
+            return returnSavedFlightOr503(cleanFlight, existingFlightOpt);
+        }
 
         if (existingFlightOpt.isPresent()) {
             flight = existingFlightOpt.get();
@@ -147,6 +167,40 @@ public class FlightService {
         }
 
         return mapToFlightResponseDto(flight, isDegradedFallback);
+    }
+
+    private FlightResponseDto returnSavedFlightOr503(
+            String flightIata,
+            Optional<Flight> savedFlight
+    ) {
+        if (savedFlight.isPresent()) {
+            Flight flight = savedFlight.get();
+
+            boolean hasRealData = flight.getStatus() != null
+                    && !flight.getStatus().isBlank()
+                    && !"UNKNOWN_DEGRADED".equalsIgnoreCase(flight.getStatus())
+                    && flight.getDepartureIata() != null
+                    && flight.getDepartureIata().matches("[A-Z]{3}")
+                    && flight.getArrivalIata() != null
+                    && flight.getArrivalIata().matches("[A-Z]{3}")
+                    && flight.getScheduledDepartureTime() != null
+                    && flight.getScheduledArrivalTime() != null;
+
+            if (hasRealData) {
+                log.warn("Рейс {}: source=DB_FALLBACK, status={}, degraded=true",
+                        flightIata, flight.getStatus());
+
+                return mapToFlightResponseDto(flight, true);
+            }
+        }
+
+        log.warn("Рейс {}: source=NONE, сохранённых данных недостаточно, status=503",
+                flightIata);
+
+        throw new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Не удалось получить данные рейса, сохранённых реальных данных нет"
+        );
     }
 
     @Transactional(readOnly = true)

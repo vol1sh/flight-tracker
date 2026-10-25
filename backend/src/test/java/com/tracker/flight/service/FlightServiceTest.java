@@ -22,6 +22,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import org.springframework.web.server.ResponseStatusException;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit-тестирование бизнес-логики FlightService")
 class FlightServiceTest {
@@ -130,10 +134,10 @@ class FlightServiceTest {
     }
 
     @Test
-    @DisplayName("Аварийный режим (Circuit Breaker fallback): сервис отдает ответ с флагом degraded=true")
-    void syncAndGetFlight_WhenFallbackActivated_ShouldSetDegradedFlag() {
-        // Arrange
+    @DisplayName("При сбое без сохранённых данных возвращается 503")
+    void syncAndGetFlight_WhenFallbackActivated_ShouldReturn503WithoutSaving() {
         String flightIata = "SU-500";
+
         ExternalFlightDto fallbackDto = ExternalFlightDto.builder()
                 .flightIata(flightIata)
                 .status("UNKNOWN_DEGRADED")
@@ -141,22 +145,20 @@ class FlightServiceTest {
                 .isFallbackData(true)
                 .build();
 
-        Flight degradedFlight = Flight.builder()
-                .id(2L)
-                .flightIata(flightIata)
-                .status("UNKNOWN_DEGRADED")
-                .delayMinutes(0)
-                .build();
+        when(flightRepository.findByFlightIata(flightIata))
+                .thenReturn(Optional.empty());
 
-        when(aviationApiClient.fetchLiveFlight(flightIata)).thenReturn(fallbackDto);
-        when(flightRepository.findByFlightIata(flightIata)).thenReturn(Optional.empty());
-        when(flightRepository.save(any(Flight.class))).thenReturn(degradedFlight);
+        when(aviationApiClient.fetchLiveFlight(flightIata))
+                .thenReturn(fallbackDto);
 
-        // Act
-        FlightResponseDto response = flightService.syncAndGetFlight(flightIata);
+        assertThatThrownBy(() -> flightService.syncAndGetFlight(flightIata))
+                .isInstanceOfSatisfying(
+                        ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode().value())
+                                .isEqualTo(503)
+                );
 
-        // Assert
-        assertThat(response.isDegraded()).isTrue();
-        assertThat(response.getStatus()).isEqualTo("UNKNOWN_DEGRADED");
+        verify(flightRepository, never()).save(any(Flight.class));
+        verifyNoInteractions(logRepository);
     }
 }
