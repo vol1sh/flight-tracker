@@ -56,6 +56,10 @@ public class Flight {
     @Column(name = "delay_minutes")
     private Integer delayMinutes;
 
+    // Время успешного получения данных от AviationStack (ручное обновление в сервисе)
+    @Column(name = "last_synced_at")
+    private Instant lastSyncedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
@@ -70,7 +74,7 @@ public class Flight {
                   String arrivalIata, String arrivalCity, String arrivalAirportName,
                   Instant scheduledDepartureTime, Instant actualDepartureTime,
                   Instant scheduledArrivalTime, Instant actualArrivalTime,
-                  String status, Integer delayMinutes, Instant createdAt, Instant updatedAt) {
+                  String status, Integer delayMinutes, Instant lastSyncedAt, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.flightIata = flightIata;
         this.departureIata = departureIata;
@@ -85,6 +89,7 @@ public class Flight {
         this.actualArrivalTime = actualArrivalTime;
         this.status = status;
         this.delayMinutes = delayMinutes;
+        this.lastSyncedAt = lastSyncedAt;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -108,6 +113,7 @@ public class Flight {
         private Instant actualArrivalTime;
         private String status = "SCHEDULED";
         private Integer delayMinutes = 0;
+        private Instant lastSyncedAt;
         private Instant createdAt;
         private Instant updatedAt;
 
@@ -125,6 +131,7 @@ public class Flight {
         public Builder actualArrivalTime(Instant actualArrivalTime) { this.actualArrivalTime = actualArrivalTime; return this; }
         public Builder status(String status) { this.status = status; return this; }
         public Builder delayMinutes(Integer delayMinutes) { this.delayMinutes = delayMinutes; return this; }
+        public Builder lastSyncedAt(Instant lastSyncedAt) { this.lastSyncedAt = lastSyncedAt; return this; }
         public Builder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
         public Builder updatedAt(Instant updatedAt) { this.updatedAt = updatedAt; return this; }
 
@@ -132,7 +139,7 @@ public class Flight {
             return new Flight(id, flightIata, departureIata, departureCity, departureAirportName,
                     arrivalIata, arrivalCity, arrivalAirportName,
                     scheduledDepartureTime, actualDepartureTime, scheduledArrivalTime, actualArrivalTime,
-                    status, delayMinutes, createdAt, updatedAt);
+                    status, delayMinutes, lastSyncedAt, createdAt, updatedAt);
         }
     }
 
@@ -164,6 +171,10 @@ public class Flight {
     public void setStatus(String status) { this.status = status; }
     public Integer getDelayMinutes() { return delayMinutes; }
     public void setDelayMinutes(Integer delayMinutes) { this.delayMinutes = delayMinutes; }
+
+    public Instant getLastSyncedAt() { return lastSyncedAt; }
+    public void setLastSyncedAt(Instant lastSyncedAt) { this.lastSyncedAt = lastSyncedAt; }
+
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }
