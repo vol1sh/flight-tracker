@@ -36,3 +36,12 @@ app:
     flight-poller:
       enabled: ${SCHEDULER_POLLER_ENABLED:false}
       fixed-delay-ms: ${SCHEDULER_POLLER_DELAY_MS:86400000}
+
+# 404 (рейс подтверждённо не найден) и ошибки доступа — не сбои провайдера, не должны размыкать цепь.
+resilience4j:
+  circuitbreaker:
+    instances:
+      aviationApi:
+        ignore-exceptions:
+          - org.springframework.web.server.ResponseStatusException
+          - com.tracker.flight.client.exception.AviationAccessException
