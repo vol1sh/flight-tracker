@@ -7,6 +7,8 @@ import com.tracker.flight.entity.Flight;
 import com.tracker.flight.entity.FlightStatusLog;
 import com.tracker.flight.repository.FlightRepository;
 import com.tracker.flight.repository.FlightStatusLogRepository;
+import com.tracker.flight.client.exception.AviationApiUnavailableException;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,13 +16,20 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+
+
+import org.springframework.web.server.ResponseStatusException;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit-тестирование бизнес-логики FlightService")
@@ -130,10 +139,10 @@ class FlightServiceTest {
     }
 
     @Test
-    @DisplayName("Аварийный режим (Circuit Breaker fallback): сервис отдает ответ с флагом degraded=true")
-    void syncAndGetFlight_WhenFallbackActivated_ShouldSetDegradedFlag() {
-        // Arrange
+    @DisplayName("При сбое без сохранённых данных возвращается 503")
+    void syncAndGetFlight_WhenFallbackActivated_ShouldReturn503WithoutSaving() {
         String flightIata = "SU-500";
+
         ExternalFlightDto fallbackDto = ExternalFlightDto.builder()
                 .flightIata(flightIata)
                 .status("UNKNOWN_DEGRADED")
@@ -141,22 +150,58 @@ class FlightServiceTest {
                 .isFallbackData(true)
                 .build();
 
-        Flight degradedFlight = Flight.builder()
-                .id(2L)
-                .flightIata(flightIata)
-                .status("UNKNOWN_DEGRADED")
-                .delayMinutes(0)
+        when(flightRepository.findByFlightIata(flightIata))
+                .thenReturn(Optional.empty());
+
+        when(aviationApiClient.fetchLiveFlight(flightIata))
+                .thenReturn(fallbackDto);
+
+        assertThatThrownBy(() -> flightService.syncAndGetFlight(flightIata))
+                .isInstanceOfSatisfying(
+                        ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatusCode().value())
+                                .isEqualTo(503)
+                );
+
+        verify(flightRepository, never()).save(any(Flight.class));
+        verifyNoInteractions(logRepository);
+    }
+
+    @Test
+    @DisplayName("При сбое API возвращаются сохранённые данные без изменения")
+    void apiFailure_ShouldReturnSavedFlightWithoutSaving() {
+        Instant departure = Instant.parse("2026-10-24T10:00:00Z");
+        Instant arrival = Instant.parse("2026-10-24T18:00:00Z");
+        Instant lastUpdated = Instant.parse("2026-10-24T09:50:00Z");
+
+        Flight savedFlight = Flight.builder()
+                .id(1L)
+                .flightIata("SU100")
+                .departureIata("SVO")
+                .arrivalIata("JFK")
+                .scheduledDepartureTime(departure)
+                .scheduledArrivalTime(arrival)
+                .status("DELAYED")
+                .delayMinutes(35)
+                .updatedAt(lastUpdated)
                 .build();
 
-        when(aviationApiClient.fetchLiveFlight(flightIata)).thenReturn(fallbackDto);
-        when(flightRepository.findByFlightIata(flightIata)).thenReturn(Optional.empty());
-        when(flightRepository.save(any(Flight.class))).thenReturn(degradedFlight);
+        when(flightRepository.findByFlightIata("SU100"))
+                .thenReturn(Optional.of(savedFlight));
 
-        // Act
-        FlightResponseDto response = flightService.syncAndGetFlight(flightIata);
+        when(aviationApiClient.fetchLiveFlight("SU100"))
+                .thenThrow(new AviationApiUnavailableException("Test timeout"));
 
-        // Assert
+        FlightResponseDto response = flightService.syncAndGetFlight("SU100");
+
         assertThat(response.isDegraded()).isTrue();
-        assertThat(response.getStatus()).isEqualTo("UNKNOWN_DEGRADED");
+        assertThat(response.getStatus()).isEqualTo("DELAYED");
+        assertThat(response.getDelayMinutes()).isEqualTo(35);
+        assertThat(response.getScheduledDeparture()).isEqualTo(departure);
+        assertThat(response.getScheduledArrival()).isEqualTo(arrival);
+        assertThat(response.getLastUpdated()).isEqualTo(lastUpdated);
+
+        verify(flightRepository, never()).save(any(Flight.class));
+        verifyNoInteractions(logRepository);
     }
 }
