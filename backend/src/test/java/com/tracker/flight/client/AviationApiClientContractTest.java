@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.ExpectedCount.manyTimes;
+import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -255,6 +256,52 @@ class AviationApiClientContractTest {
 
         assertThat(dto.isFallbackData()).isFalse();
         assertThat(dto.getDepartureAirport()).isEqualTo("LED");
+    }
+
+    @Test
+    @DisplayName("С датой: 401 invalid_access_key — это НЕ запрет фильтра даты, повтора без даты нет")
+    void dateQuery_Http401InvalidKey_ShouldNotRetryWithoutDate() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withStatus(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"error\":{\"code\":\"invalid_access_key\",\"message\":\"bad key\"}}"));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationAccessException.class);
+        server.verify(); // ровно один запрос
+    }
+
+    @Test
+    @DisplayName("С датой: 403 без кода function_access_restricted — повтора без даты нет")
+    void dateQuery_Http403WithoutRestrictionCode_ShouldNotRetryWithoutDate() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON).body(""));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationAccessException.class);
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("С датой: HTTP 200 + error invalid_access_key — повтора без даты нет")
+    void dateQuery_ErrorBodyInvalidKey_ShouldNotRetryWithoutDate() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withSuccess("{\"error\":{\"code\":\"invalid_access_key\"}}", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationAccessException.class);
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("Без даты: function_access_restricted — обычный AviationAccessException, без повтора")
+    void noDateQuery_FunctionRestricted_ShouldBePlainAccessError() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"error\":{\"code\":\"function_access_restricted\"}}"));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100"))
+                .isInstanceOf(AviationAccessException.class);
+        server.verify();
     }
 
     @Test
