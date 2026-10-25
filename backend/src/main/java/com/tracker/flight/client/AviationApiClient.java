@@ -47,6 +47,10 @@ public class AviationApiClient {
     ) {
         this.restClient = builder.baseUrl(baseUrl).build();
         this.apiKey = apiKey != null ? apiKey.trim() : "";
+        if (baseUrl != null && baseUrl.trim().toLowerCase().startsWith("http://")) {
+            // Ключ уходит в query-параметре — по HTTP он передаётся открытым текстом.
+            log.warn("AviationStack base-url использует HTTP без шифрования ({}); используйте https://", baseUrl);
+        }
     }
 
     public AviationApiClient(RestClient.Builder builder, String baseUrl) {
@@ -96,15 +100,15 @@ public class AviationApiClient {
                     .limit(8)
                     .collect(Collectors.toList());
         } catch (Exception e) {
-            log.error("Ошибка при получении ближайших рейсов: {}", e.getMessage());
+            log.error("Ошибка при получении ближайших рейсов: {}", redact(e.getMessage()));
             return Collections.emptyList();
         }
     }
 
-    // Без даты, оставлен для совместимости пока Илья не переключит FlightService (И-1).
+    // Без даты — используется FlightService.
     @Cacheable(
             value = RedisConfig.FLIGHTS_CACHE,
-            key = "#flightIata",
+            key = "T(com.tracker.flight.client.AviationApiClient).normalizeFlightCode(#flightIata)",
             unless = "#result == null || #result.fallbackData"
     )
     @CircuitBreaker(name = "aviationApi", fallbackMethod = "fallbackGetFlightStatus")
@@ -115,7 +119,7 @@ public class AviationApiClient {
     // Б-2: поиск по дате. Если тариф не поддерживает flight_date — не подставляем случайный рейс, а ищем точное совпадение сами.
     @Cacheable(
             value = RedisConfig.FLIGHTS_CACHE,
-            key = "#flightIata + ':' + #flightDate",
+            key = "T(com.tracker.flight.client.AviationApiClient).normalizeFlightCode(#flightIata) + ':' + #flightDate",
             unless = "#result == null || #result.fallbackData"
     )
     @CircuitBreaker(name = "aviationApi", fallbackMethod = "fallbackGetFlightStatusWithDate")
@@ -123,12 +127,20 @@ public class AviationApiClient {
         return fetchLiveFlightInternal(flightIata, flightDate);
     }
 
+    /**
+     * Единый вид номера рейса для запроса и для ключа кэша: "su-100", "SU 100" и "SU100" — один и тот же рейс.
+     * Публичный и статический, потому что используется в SpEL-выражении ключа @Cacheable.
+     */
+    public static String normalizeFlightCode(String flightIata) {
+        return flightIata == null ? "" : flightIata.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
+    }
+
     private ExternalFlightDto fetchLiveFlightInternal(String flightIata, LocalDate flightDate) {
         if (apiKey.isBlank()) {
             throw new AviationAccessException("API-ключ AviationStack не задан");
         }
 
-        String cleanFlight = flightIata.replaceAll("[^A-Za-z0-9]", "").trim().toUpperCase();
+        String cleanFlight = normalizeFlightCode(flightIata);
         boolean isIcao = cleanFlight.matches("^[A-Z]{3}\\d+.*");
         String primaryParam = isIcao ? "flight_icao" : "flight_iata";
         String secondaryParam = isIcao ? "flight_iata" : "flight_icao";
@@ -212,22 +224,32 @@ public class AviationApiClient {
                     .body(AviationStackDto.class);
         } catch (HttpStatusCodeException e) {
             // Б-3: различаем сетевые/серверные ошибки, квоту и доступ вместо общего null.
+            // Сначала смотрим код ошибки в теле (квота может прийти и с 403), потом HTTP-статус.
             HttpStatusCode status = e.getStatusCode();
+            String errorCode = extractErrorCode(e.getResponseBodyAsString());
+            RuntimeException byCode = classifyErrorCode(errorCode, "HTTP " + status.value(), flightDate != null);
+            if (byCode != null) {
+                throw byCode;
+            }
             if (status == HttpStatus.UNAUTHORIZED || status == HttpStatus.FORBIDDEN) {
-                String errorCode = extractErrorCode(e.getResponseBodyAsString());
                 throw accessException(errorCode, "HTTP " + status.value(), flightDate != null);
             }
             if (status.value() == 429) {
                 throw new AviationRateLimitException("Превышен лимит запросов AviationStack (HTTP 429)");
             }
             if (status.is5xxServerError()) {
-                throw new AviationApiUnavailableException("AviationStack вернул серверную ошибку HTTP " + status.value(), e);
+                throw new AviationApiUnavailableException("AviationStack вернул серверную ошибку HTTP " + status.value());
             }
-            throw new AviationApiUnavailableException("Неожиданный HTTP-статус от AviationStack: " + status.value(), e);
+            throw new AviationApiUnavailableException("Неожиданный HTTP-статус от AviationStack: " + status.value()
+                    + (errorCode != null ? " (" + errorCode + ")" : ""));
         } catch (ResourceAccessException e) {
-            throw new AviationApiUnavailableException("AviationStack недоступен (таймаут/сеть): " + e.getMessage(), e);
+            // Сообщение ResourceAccessException содержит полный URL вместе с access_key — его не сохраняем.
+            Throwable root = e.getMostSpecificCause();
+            String reason = root != e ? root.getClass().getSimpleName() + ": " + redact(root.getMessage()) : "I/O error";
+            throw new AviationApiUnavailableException("AviationStack недоступен (таймаут/сеть): " + reason,
+                    root != e ? root : null);
         } catch (Exception e) {
-            throw new AviationApiUnavailableException("Не удалось разобрать ответ AviationStack: " + e.getMessage(), e);
+            throw new AviationApiUnavailableException("Не удалось разобрать ответ AviationStack: " + redact(e.getMessage()), e);
         }
 
         if (body == null) {
@@ -238,13 +260,9 @@ public class AviationApiClient {
         if (body.getError() != null) {
             String code = body.getError().getCode();
             String message = body.getError().getMessage();
-            String c = code != null ? code.toLowerCase() : "";
-            if (c.contains("usage_limit") || c.contains("rate_limit")) {
-                throw new AviationRateLimitException("AviationStack error: " + code + " — " + message);
-            }
-            if (c.contains("access_restricted") || c.contains("invalid_access_key")
-                    || c.contains("missing_access_key") || c.contains("inactive_user")) {
-                throw accessException(code, message, flightDate != null);
+            RuntimeException byCode = classifyErrorCode(code, message, flightDate != null);
+            if (byCode != null) {
+                throw byCode;
             }
             throw new AviationApiUnavailableException("AviationStack error: " + code + " — " + message);
         }
@@ -264,6 +282,27 @@ public class AviationApiClient {
         DateFilterNotAllowedException(String message) {
             super(message);
         }
+    }
+
+    /**
+     * Классификация по коду ошибки AviationStack (не зависит от HTTP-статуса).
+     * null — код не про квоту и не про доступ, решение принимает вызывающий код.
+     */
+    private static RuntimeException classifyErrorCode(String errorCode, String details, boolean dateQuery) {
+        String c = errorCode != null ? errorCode.toLowerCase() : "";
+        if (c.contains("usage_limit") || c.contains("rate_limit")) {
+            return new AviationRateLimitException("Превышен лимит AviationStack: " + errorCode + " (" + details + ")");
+        }
+        if (c.contains("access_restricted") || c.contains("invalid_access_key")
+                || c.contains("missing_access_key") || c.contains("inactive_user")) {
+            return accessException(errorCode, details, dateQuery);
+        }
+        return null;
+    }
+
+    // Б-1: ключ передаётся в URL (access_key=...), поэтому вырезаем его из любых текстов для логов/исключений.
+    static String redact(String text) {
+        return text == null ? null : text.replaceAll("access_key=[^&\"'\\s]*", "access_key=***");
     }
 
     private static AviationAccessException accessException(String errorCode, String details, boolean dateQuery) {
@@ -313,9 +352,9 @@ public class AviationApiClient {
             return new AviationApiUnavailableException(
                     "AviationStack временно недоступен: Circuit Breaker открыт", t);
         }
-        log.warn("Неклассифицированный сбой при запросе рейса {}: {}", subject, t.toString());
+        log.warn("Неклассифицированный сбой при запросе рейса {}: {}", subject, redact(t.toString()));
         return new AviationApiUnavailableException(
-                "Неожиданный сбой при обращении к AviationStack: " + t.getMessage(), t);
+                "Неожиданный сбой при обращении к AviationStack: " + redact(t.getMessage()), t);
     }
 
     private ExternalFlightDto mapToExternalDto(String flightIata, AviationStackDto.FlightItem item) {
@@ -326,19 +365,19 @@ public class AviationApiClient {
             throw new AviationApiUnavailableException("AviationStack вернул рейс " + flightIata + " без данных об аэропортах");
         }
 
-        String depIata = dep != null && dep.getIata() != null ? dep.getIata().toUpperCase() : "DEP";
-        String depAirport = dep != null && dep.getAirport() != null ? dep.getAirport() : depIata;
+        String depIata = dep.getIata() != null ? dep.getIata().toUpperCase() : "DEP";
+        String depAirport = dep.getAirport() != null ? dep.getAirport() : depIata;
 
-        String arrIata = arr != null && arr.getIata() != null ? arr.getIata().toUpperCase() : "ARR";
-        String arrAirport = arr != null && arr.getAirport() != null ? arr.getAirport() : arrIata;
+        String arrIata = arr.getIata() != null ? arr.getIata().toUpperCase() : "ARR";
+        String arrAirport = arr.getAirport() != null ? arr.getAirport() : arrIata;
 
-        String depTz = dep != null ? dep.getTimezone() : null;
-        String arrTz = arr != null ? arr.getTimezone() : null;
+        String depTz = dep.getTimezone();
+        String arrTz = arr.getTimezone();
 
-        Instant depSched = parseAirportTimeToUtc(dep != null ? dep.getScheduled() : null, depTz);
-        Instant depActual = parseAirportTimeToUtc(dep != null ? (dep.getActual() != null ? dep.getActual() : dep.getEstimated()) : null, depTz);
-        Instant arrSched = parseAirportTimeToUtc(arr != null ? arr.getScheduled() : null, arrTz);
-        Instant arrActual = parseAirportTimeToUtc(arr != null ? (arr.getActual() != null ? arr.getActual() : arr.getEstimated()) : null, arrTz);
+        Instant depSched = parseAirportTimeToUtc(dep.getScheduled(), depTz);
+        Instant depActual = parseAirportTimeToUtc(dep.getActual() != null ? dep.getActual() : dep.getEstimated(), depTz);
+        Instant arrSched = parseAirportTimeToUtc(arr.getScheduled(), arrTz);
+        Instant arrActual = parseAirportTimeToUtc(arr.getActual() != null ? arr.getActual() : arr.getEstimated(), arrTz);
 
         // Не подставляем выдуманное "сейчас": без расписания данные непригодны.
         if (depSched == null || arrSched == null) {
@@ -347,9 +386,9 @@ public class AviationApiClient {
         }
 
         int delay = 0;
-        if (dep != null && dep.getDelay() != null && dep.getDelay() > 0) {
+        if (dep.getDelay() != null && dep.getDelay() > 0) {
             delay = dep.getDelay();
-        } else if (arr != null && arr.getDelay() != null && arr.getDelay() > 0) {
+        } else if (arr.getDelay() != null && arr.getDelay() > 0) {
             delay = arr.getDelay();
         }
 
@@ -370,6 +409,7 @@ public class AviationApiClient {
                 .status(status)
                 .delayMinutes(delay)
                 .fallbackData(false)
+                .fetchedAt(Instant.now())
                 .build();
     }
 
