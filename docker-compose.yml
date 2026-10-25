@@ -54,7 +54,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: tracker_secret
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
-      AVIATION_API_BASE_URL: ${AVIATION_API_BASE_URL:-http://api.aviationstack.com/v1}
+      AVIATION_API_BASE_URL: ${AVIATION_API_BASE_URL:-https://api.aviationstack.com/v1}
       AVIATION_API_KEY: ${AVIATION_API_KEY:-}
     networks:
       - flight_network

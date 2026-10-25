@@ -109,18 +109,49 @@ public class FlightService {
                     logRepository.save(statusLog);
                 }
 
-                flight.setDepartureIata(externalDto.getDepartureAirport());
-                flight.setDepartureCity(externalDto.getDepartureCity());
-                flight.setDepartureAirportName(externalDto.getDepartureAirportName());
-                flight.setArrivalIata(externalDto.getArrivalAirport());
-                flight.setArrivalCity(externalDto.getArrivalCity());
-                flight.setArrivalAirportName(externalDto.getArrivalAirportName());
+
+                if (externalDto.getDepartureAirport() != null) {
+                    flight.setDepartureIata(externalDto.getDepartureAirport());
+                }
+
+                if (externalDto.getDepartureCity() != null) {
+                    flight.setDepartureCity(externalDto.getDepartureCity());
+                }
+
+                if (externalDto.getDepartureAirportName() != null) {
+                    flight.setDepartureAirportName(externalDto.getDepartureAirportName());
+                }
+
+                if (externalDto.getArrivalAirport() != null) {
+                    flight.setArrivalIata(externalDto.getArrivalAirport());
+                }
+
+                if (externalDto.getArrivalCity() != null) {
+                    flight.setArrivalCity(externalDto.getArrivalCity());
+                }
+
+                if (externalDto.getArrivalAirportName() != null) {
+                    flight.setArrivalAirportName(externalDto.getArrivalAirportName());
+                }
+
                 flight.setStatus(externalDto.getStatus());
                 flight.setDelayMinutes(externalDto.getDelayMinutes());
-                flight.setScheduledDepartureTime(externalDto.getScheduledDeparture());
-                flight.setScheduledArrivalTime(externalDto.getScheduledArrival());
-                flight.setActualDepartureTime(externalDto.getActualDeparture());
-                flight.setActualArrivalTime(externalDto.getActualArrival());
+
+                if (externalDto.getScheduledDeparture() != null) {
+                    flight.setScheduledDepartureTime(externalDto.getScheduledDeparture());
+                }
+
+                if (externalDto.getScheduledArrival() != null) {
+                    flight.setScheduledArrivalTime(externalDto.getScheduledArrival());
+                }
+
+                if (externalDto.getActualDeparture() != null) {
+                    flight.setActualDepartureTime(externalDto.getActualDeparture());
+                }
+
+                if (externalDto.getActualArrival() != null) {
+                    flight.setActualArrivalTime(externalDto.getActualArrival());
+                }
                 flight = flightRepository.save(flight);
             }
         } else {
