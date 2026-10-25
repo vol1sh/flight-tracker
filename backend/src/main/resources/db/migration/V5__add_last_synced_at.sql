@@ -1,0 +1,1 @@
+ALTER TABLE flights ADD COLUMN last_synced_at TIMESTAMPTZ NULL;
