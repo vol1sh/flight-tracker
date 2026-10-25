@@ -48,6 +48,58 @@ class FlightServiceTest {
     private FlightService flightService;
 
     @Test
+    @DisplayName("lastSyncedAt берётся из fetchedAt клиента — момента реального получения данных от поставщика")
+    void syncAndGetFlight_ShouldStoreProviderFetchTimeAsLastSyncedAt() {
+        Instant fetchedAt = Instant.parse("2026-10-25T10:00:00Z");
+        ExternalFlightDto externalDto = ExternalFlightDto.builder()
+                .flightIata("SU100")
+                .departureAirport("SVO")
+                .arrivalAirport("LED")
+                .scheduledDeparture(Instant.parse("2026-10-25T12:00:00Z"))
+                .scheduledArrival(Instant.parse("2026-10-25T13:30:00Z"))
+                .status("SCHEDULED")
+                .delayMinutes(0)
+                .fetchedAt(fetchedAt)
+                .build();
+
+        when(aviationApiClient.fetchLiveFlight("SU100")).thenReturn(externalDto);
+        when(flightRepository.findByFlightIata("SU100")).thenReturn(Optional.empty());
+        when(flightRepository.save(any(Flight.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        flightService.syncAndGetFlight("SU100");
+
+        ArgumentCaptor<Flight> flightCaptor = ArgumentCaptor.forClass(Flight.class);
+        verify(flightRepository).save(flightCaptor.capture());
+        assertThat(flightCaptor.getValue().getLastSyncedAt()).isEqualTo(fetchedAt);
+    }
+
+    @Test
+    @DisplayName("Degraded-ответ из БД показывает реальное время последней синхронизации, а не 'сейчас'")
+    void syncAndGetFlight_WhenProviderUnavailable_LastUpdatedIsRealSyncTime() {
+        Instant lastSync = Instant.parse("2026-10-25T08:00:00Z");
+        Flight saved = Flight.builder()
+                .id(7L)
+                .flightIata("SU100")
+                .departureIata("SVO")
+                .arrivalIata("LED")
+                .scheduledDepartureTime(Instant.parse("2026-10-25T12:00:00Z"))
+                .scheduledArrivalTime(Instant.parse("2026-10-25T13:30:00Z"))
+                .status("SCHEDULED")
+                .delayMinutes(0)
+                .lastSyncedAt(lastSync)
+                .build();
+
+        when(flightRepository.findByFlightIata("SU100")).thenReturn(Optional.of(saved));
+        when(aviationApiClient.fetchLiveFlight("SU100"))
+                .thenThrow(new AviationApiUnavailableException("timeout"));
+
+        FlightResponseDto response = flightService.syncAndGetFlight("SU100");
+
+        assertThat(response.isDegraded()).isTrue();
+        assertThat(response.getLastUpdated()).isEqualTo(lastSync);
+    }
+
+    @Test
     @DisplayName("Первичное сохранение рейса: создает запись в flights и первый лог аудита")
     void syncAndGetFlight_WhenFlightIsNew_ShouldSaveFlightAndCreateInitialLog() {
         // Arrange
