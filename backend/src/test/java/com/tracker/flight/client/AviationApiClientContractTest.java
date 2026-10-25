@@ -25,6 +25,8 @@ import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.client.ExpectedCount.manyTimes;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -51,6 +53,10 @@ class AviationApiClientContractTest {
                          "scheduled":"2026-10-25T11:30:00+00:00"},
               "airline":{"name":"Aeroflot"},
               "flight":{"iata":"SU100"}}]}""";
+
+    // Тот же рейс, но за 24 октября — для проверок "другая дата".
+    private static final String FLIGHT_JSON_OTHER_DATE =
+            FLIGHT_JSON.replace("\"flight_date\":\"2026-10-25\"", "\"flight_date\":\"2026-10-24\"");
 
     @Configuration
     @EnableCaching
