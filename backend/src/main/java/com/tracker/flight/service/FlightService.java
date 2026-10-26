@@ -136,6 +136,9 @@ public class FlightService {
 
                 flight.setStatus(externalDto.getStatus());
                 flight.setDelayMinutes(externalDto.getDelayMinutes());
+                if (externalDto.getFetchedAt() != null) {
+                    flight.setLastSyncedAt(externalDto.getFetchedAt());
+                }
 
                 if (externalDto.getScheduledDeparture() != null) {
                     flight.setScheduledDepartureTime(externalDto.getScheduledDeparture());
@@ -170,6 +173,7 @@ public class FlightService {
                     .actualArrivalTime(externalDto.getActualArrival())
                     .status(externalDto.getStatus() != null ? externalDto.getStatus() : "UNKNOWN_DEGRADED")
                     .delayMinutes(externalDto.getDelayMinutes() != null ? externalDto.getDelayMinutes() : 0)
+                    .lastSyncedAt(externalDto.getFetchedAt())
                     .build();
 
             flight = flightRepository.save(flight);
@@ -266,7 +270,9 @@ public class FlightService {
                 .status(flight.getStatus())
                 .delayMinutes(flight.getDelayMinutes())
                 .isDegraded(isDegraded)
-                .lastUpdated(flight.getUpdatedAt() != null ? flight.getUpdatedAt() : Instant.now())
+                // #59: реальный момент получения данных от поставщика; для старых записей — время изменения в БД.
+                // Instant.now() не подставляем: в degraded-режиме это выдавало бы старые данные за свежие.
+                .lastUpdated(flight.getLastSyncedAt() != null ? flight.getLastSyncedAt() : flight.getUpdatedAt())
                 .build();
     }
 }
