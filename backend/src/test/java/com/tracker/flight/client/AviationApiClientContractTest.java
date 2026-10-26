@@ -27,7 +27,10 @@ import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.client.ExpectedCount.manyTimes;
+import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -53,6 +56,10 @@ class AviationApiClientContractTest {
                          "scheduled":"2026-10-25T11:30:00+00:00"},
               "airline":{"name":"Aeroflot"},
               "flight":{"iata":"SU100"}}]}""";
+
+    // Тот же рейс, но за 24 октября — для проверок "другая дата".
+    private static final String FLIGHT_JSON_OTHER_DATE =
+            FLIGHT_JSON.replace("\"flight_date\":\"2026-10-25\"", "\"flight_date\":\"2026-10-24\"");
 
     @Configuration
     @EnableCaching
@@ -261,6 +268,52 @@ class AviationApiClientContractTest {
     }
 
     @Test
+    @DisplayName("С датой: 401 invalid_access_key — это НЕ запрет фильтра даты, повтора без даты нет")
+    void dateQuery_Http401InvalidKey_ShouldNotRetryWithoutDate() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withStatus(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"error\":{\"code\":\"invalid_access_key\",\"message\":\"bad key\"}}"));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationAccessException.class);
+        server.verify(); // ровно один запрос
+    }
+
+    @Test
+    @DisplayName("С датой: 403 без кода function_access_restricted — повтора без даты нет")
+    void dateQuery_Http403WithoutRestrictionCode_ShouldNotRetryWithoutDate() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON).body(""));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationAccessException.class);
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("С датой: HTTP 200 + error invalid_access_key — повтора без даты нет")
+    void dateQuery_ErrorBodyInvalidKey_ShouldNotRetryWithoutDate() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withSuccess("{\"error\":{\"code\":\"invalid_access_key\"}}", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationAccessException.class);
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("Без даты: function_access_restricted — обычный AviationAccessException, без повтора")
+    void noDateQuery_FunctionRestricted_ShouldBePlainAccessError() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"error\":{\"code\":\"function_access_restricted\"}}"));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100"))
+                .isInstanceOf(AviationAccessException.class);
+        server.verify();
+    }
+
+    @Test
     @DisplayName("Ключ не задан -> AviationAccessException")
     void missingApiKey_ShouldBeAccess() {
         AviationApiClient noKey = new AviationApiClient(RestClient.builder(), BASE, "  ");
@@ -269,6 +322,115 @@ class AviationApiClientContractTest {
                 .isInstanceOf(AviationAccessException.class);
         assertThatThrownBy(() -> noKey.fetchLiveFlight("SU100", DATE))
                 .isInstanceOf(AviationAccessException.class);
+    }
+
+    // ---------- #57: остальные коды ошибок ----------
+
+    @Test
+    @DisplayName("HTTP 500 и 503 -> AviationApiUnavailableException")
+    void http500_503_ShouldBeUnavailable() {
+        respond(HttpStatus.INTERNAL_SERVER_ERROR, "{}");
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100")).isInstanceOf(AviationApiUnavailableException.class);
+
+        server.reset();
+        respond(HttpStatus.SERVICE_UNAVAILABLE, "{}");
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE)).isInstanceOf(AviationApiUnavailableException.class);
+    }
+
+    @Test
+    @DisplayName("Таймаут/сетевой сбой -> AviationApiUnavailableException")
+    void networkTimeout_ShouldBeUnavailable() {
+        server.expect(manyTimes(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(request -> {
+                    throw new java.net.SocketTimeoutException("Read timed out");
+                });
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100"))
+                .isInstanceOf(AviationApiUnavailableException.class)
+                .satisfies(e -> {
+                    // Б-1: URL запроса содержит access_key — он не должен попасть в сообщение или причину.
+                    assertThat(e.getMessage()).doesNotContain("test-key");
+                    for (Throwable c = e.getCause(); c != null; c = c.getCause()) {
+                        assertThat(String.valueOf(c.getMessage())).doesNotContain("test-key");
+                    }
+                });
+    }
+
+    @Test
+    @DisplayName("Квота с HTTP 403 (usage_limit_reached) — это AviationRateLimitException, а не ошибка доступа")
+    void http403WithUsageLimitCode_ShouldBeRateLimit() {
+        respond(HttpStatus.FORBIDDEN, "{\"error\":{\"code\":\"usage_limit_reached\"}}");
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationRateLimitException.class);
+    }
+
+    @Test
+    @DisplayName("redact() вырезает access_key из текста")
+    void redact_RemovesApiKey() {
+        assertThat(AviationApiClient.redact(
+                "I/O error on GET request for \"https://x/v1/flights?access_key=abc123&flight_iata=SU100\": timeout"))
+                .doesNotContain("abc123")
+                .contains("access_key=***")
+                .contains("flight_iata=SU100");
+    }
+
+    @Test
+    @DisplayName("HTTP 200 с телом error: rate_limit_reached -> AviationRateLimitException")
+    void errorBodyRateLimit_ShouldBeRateLimit() {
+        respondOk("{\"error\":{\"code\":\"rate_limit_reached\",\"message\":\"slow down\"}}");
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationRateLimitException.class);
+    }
+
+    // ---------- #59: метка получения внешних данных ----------
+
+    @Test
+    @DisplayName("fetchedAt — момент ответа поставщика, и при чтении из кэша он не меняется")
+    void fetchedAt_IsSetOnProviderResponseAndKeptFromCache() {
+        respondOk(FLIGHT_JSON);
+        java.time.Instant before = java.time.Instant.now();
+
+        ExternalFlightDto first = client.fetchLiveFlight("SU100", DATE);
+        ExternalFlightDto fromCache = client.fetchLiveFlight("SU100", DATE);
+
+        assertThat(first.getFetchedAt()).isNotNull().isBetween(before, java.time.Instant.now());
+        assertThat(fromCache.getFetchedAt()).isEqualTo(first.getFetchedAt());
+    }
+
+    // ---------- #58: кэш по номеру и дате ----------
+
+    @Test
+    @DisplayName("Один номер, разные даты — разные записи кэша; повторный запрос той же даты идёт из кэша")
+    void cache_SameNumberDifferentDates_AreSeparateEntries() {
+        server.expect(once(), requestTo(containsString("flight_date=2026-10-25")))
+                .andRespond(withSuccess(FLIGHT_JSON, MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo(containsString("flight_date=2026-10-24")))
+                .andRespond(withSuccess(FLIGHT_JSON_OTHER_DATE, MediaType.APPLICATION_JSON));
+
+        client.fetchLiveFlight("SU100", DATE);
+        client.fetchLiveFlight("SU100", DATE.minusDays(1));
+        client.fetchLiveFlight("SU100", DATE);               // из кэша
+        client.fetchLiveFlight("SU100", DATE.minusDays(1));  // из кэша
+
+        server.verify(); // ровно по одному HTTP-запросу на каждую дату
+        assertThat(cache().get("SU100:" + DATE)).isNotNull();
+        assertThat(cache().get("SU100:" + DATE.minusDays(1))).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Разное написание номера (su-100 / SU 100 / SU100) — одна запись кэша")
+    void cache_KeyIsNormalizedFlightNumber() {
+        server.expect(once(), requestTo(startsWith(BASE + "/flights")))
+                .andRespond(withSuccess(FLIGHT_JSON, MediaType.APPLICATION_JSON));
+
+        client.fetchLiveFlight("su-100", DATE);
+        client.fetchLiveFlight("SU 100", DATE);
+        client.fetchLiveFlight("SU100", DATE);
+
+        server.verify(); // один HTTP-запрос на все три написания
+        assertThat(cache().get("SU100:" + DATE)).isNotNull();
     }
 
     // ---------- кэш ----------
