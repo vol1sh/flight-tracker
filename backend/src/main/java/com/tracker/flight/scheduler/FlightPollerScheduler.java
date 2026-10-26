@@ -20,44 +20,79 @@ import java.util.List;
 )
 public class FlightPollerScheduler {
 
-    private static final Logger log = LoggerFactory.getLogger(FlightPollerScheduler.class);
-    private static final List<String> TERMINAL_STATUSES = List.of("LANDED", "CANCELLED");
+    private static final Logger log =
+            LoggerFactory.getLogger(FlightPollerScheduler.class);
+
+    private static final List<String> TERMINAL_STATUSES =
+            List.of("LANDED", "CANCELLED");
 
     private final FlightRepository flightRepository;
     private final FlightService flightService;
 
-    public FlightPollerScheduler(FlightRepository flightRepository, FlightService flightService) {
+    public FlightPollerScheduler(
+            FlightRepository flightRepository,
+            FlightService flightService
+    ) {
         this.flightRepository = flightRepository;
         this.flightService = flightService;
     }
 
     @Scheduled(
-            fixedDelayString = "${app.scheduler.flight-poller.fixed-delay-ms:86400000}",
+            fixedDelayString =
+                    "${app.scheduler.flight-poller.fixed-delay-ms:86400000}",
             initialDelay = 60000
     )
     public void pollActiveFlights() {
-        List<Flight> activeFlights = flightRepository.findByStatusNotIn(TERMINAL_STATUSES);
+        List<Flight> activeFlights =
+                flightRepository.findByStatusNotIn(TERMINAL_STATUSES);
 
         if (activeFlights.isEmpty()) {
-            log.debug("Фоновый опросник: активных рейсов для отслеживания не найдено.");
+            log.debug(
+                    "Фоновый опросник: активных рейсов для отслеживания не найдено."
+            );
             return;
         }
 
-        log.info("Фоновый опросник: старт регулярной синхронизации для {} активных рейсов.", activeFlights.size());
+        log.info(
+                "Фоновый опросник: старт регулярной синхронизации для {} активных рейсов.",
+                activeFlights.size()
+        );
 
         int successCount = 0;
         int errorCount = 0;
 
         for (Flight flight : activeFlights) {
+            if (flight.getFlightDate() == null) {
+                log.warn(
+                        "Рейс {} пропущен при фоновом обновлении: дата выполнения неизвестна",
+                        flight.getFlightIata()
+                );
+                continue;
+            }
+
             try {
-                flightService.syncAndGetFlight(flight.getFlightIata());
+                flightService.syncAndGetFlight(
+                        flight.getFlightIata(),
+                        flight.getFlightDate()
+                );
+
                 successCount++;
             } catch (Exception e) {
                 errorCount++;
-                log.error("Ошибка при фоновом обновлении статуса рейса {}: {}", flight.getFlightIata(), e.getMessage());
+
+                log.error(
+                        "Ошибка при фоновом обновлении статуса рейса {} на дату {}: {}",
+                        flight.getFlightIata(),
+                        flight.getFlightDate(),
+                        e.getMessage()
+                );
             }
         }
 
-        log.info("Фоновый опросник завершил цикл. Успешно обновлено: {}, ошибок: {}.", successCount, errorCount);
+        log.info(
+                "Фоновый опросник завершил цикл. Успешно обновлено: {}, ошибок: {}.",
+                successCount,
+                errorCount
+        );
     }
 }

@@ -1,18 +1,16 @@
 package com.tracker.flight.controller;
-import java.time.LocalDate;
-import org.springframework.format.annotation.DateTimeFormat;
 import com.tracker.flight.dto.ActiveFlightDto;
 import com.tracker.flight.dto.FlightResponseDto;
 import com.tracker.flight.dto.FlightStatusLogDto;
 import com.tracker.flight.service.FlightService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.time.LocalDate;
-import org.springframework.format.annotation.DateTimeFormat;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/flights")
@@ -33,24 +31,6 @@ public class FlightController {
 
 
     @GetMapping("/{flightIata}")
-    @Operation(summary = "Получить актуальный статус рейса")
-    public ResponseEntity<FlightResponseDto> getFlightStatus(
-            @PathVariable String flightIata
-    ) {
-        return ResponseEntity.ok(
-                flightService.syncAndGetFlight(
-                        flightIata.toUpperCase()
-                )
-        );
-    }
-
-    @GetMapping("/{flightIata}/history")
-    @Operation(summary = "Получить историю аудита изменений рейса")
-    public ResponseEntity<List<FlightStatusLogDto>> getFlightHistory(@PathVariable String flightIata) {
-        return ResponseEntity.ok(flightService.getFlightHistory(flightIata.toUpperCase()));
-    }
-
-    @GetMapping("/{flightIata}")
     @Operation(summary = "Получить статус рейса на указанную дату")
     public ResponseEntity<FlightResponseDto> getFlightStatus(
             @PathVariable String flightIata,
@@ -58,10 +38,22 @@ public class FlightController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate date
     ) {
-        FlightResponseDto response =
-                flightService.syncAndGetFlight(flightIata);
+        return ResponseEntity.ok(
+                flightService.syncAndGetFlight(flightIata, date)
+        );
+    }
 
-        return ResponseEntity.ok(response);
+    @GetMapping("/{flightIata}/history")
+    @Operation(summary = "Получить историю конкретного выполнения рейса")
+    public ResponseEntity<List<FlightStatusLogDto>> getFlightHistory(
+            @PathVariable String flightIata,
+            @RequestParam("date")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date
+    ) {
+        return ResponseEntity.ok(
+                flightService.getFlightHistory(flightIata, date)
+        );
     }
 
 }
