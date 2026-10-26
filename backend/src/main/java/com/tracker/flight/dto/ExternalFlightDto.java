@@ -24,6 +24,9 @@ public class ExternalFlightDto {
     @JsonProperty("fallbackData")
     private boolean fallbackData;
 
+    // Момент, когда данные реально получены от AviationStack (не время чтения из Redis-кэша).
+    private Instant fetchedAt;
+
     public ExternalFlightDto() {
     }
 
@@ -106,6 +109,9 @@ public class ExternalFlightDto {
     public boolean getFallbackData() { return fallbackData; }
     public void setFallbackData(boolean fallbackData) { this.fallbackData = fallbackData; }
 
+    public Instant getFetchedAt() { return fetchedAt; }
+    public void setFetchedAt(Instant fetchedAt) { this.fetchedAt = fetchedAt; }
+
     public static class Builder {
         private String flightIata;
         private String departureAirport;
@@ -121,6 +127,7 @@ public class ExternalFlightDto {
         private String status;
         private Integer delayMinutes;
         private boolean fallbackData;
+        private Instant fetchedAt;
 
         public Builder flightIata(String flightIata) {
             this.flightIata = flightIata;
@@ -197,8 +204,13 @@ public class ExternalFlightDto {
             return this;
         }
 
+        public Builder fetchedAt(Instant fetchedAt) {
+            this.fetchedAt = fetchedAt;
+            return this;
+        }
+
         public ExternalFlightDto build() {
-            return new ExternalFlightDto(
+            ExternalFlightDto dto = new ExternalFlightDto(
                     flightIata,
                     departureAirport,
                     departureCity,
@@ -214,6 +226,8 @@ public class ExternalFlightDto {
                     delayMinutes,
                     fallbackData
             );
+            dto.setFetchedAt(fetchedAt);
+            return dto;
         }
     }
 }
