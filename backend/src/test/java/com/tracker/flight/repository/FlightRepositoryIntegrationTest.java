@@ -11,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -98,5 +99,43 @@ class FlightRepositoryIntegrationTest extends AbstractIntegrationTest {
         List<String> activeIatas = activeFlights.stream().map(Flight::getFlightIata).toList();
         assertThat(activeIatas).contains("SU-101", "BA-202");
         assertThat(activeIatas).doesNotContain("AF-303");
+    }
+
+    @Test
+    @DisplayName("Независимое хранение и поиск одинаковых номеров рейсов на разные даты")
+    void shouldSaveAndFindFlightsWithSameIataOnDifferentDates() {
+        LocalDate date1 = LocalDate.of(2026, 10, 25);
+        LocalDate date2 = LocalDate.of(2026, 10, 26);
+
+        Flight flight1 = Flight.builder()
+                .flightIata("SU100")
+                .departureIata("SVO")
+                .arrivalIata("LED")
+                .scheduledDepartureTime(Instant.parse("2026-10-25T10:00:00Z"))
+                .scheduledArrivalTime(Instant.parse("2026-10-25T11:30:00Z"))
+                .flightDate(date1)
+                .status("SCHEDULED")
+                .build();
+
+        Flight flight2 = Flight.builder()
+                .flightIata("SU100")
+                .departureIata("SVO")
+                .arrivalIata("LED")
+                .scheduledDepartureTime(Instant.parse("2026-10-26T10:00:00Z"))
+                .scheduledArrivalTime(Instant.parse("2026-10-26T11:30:00Z"))
+                .flightDate(date2)
+                .status("SCHEDULED")
+                .build();
+
+        flightRepository.save(flight1);
+        flightRepository.save(flight2);
+
+        List<Flight> flightsDate1 = flightRepository.findByFlightIataAndFlightDateOrderByScheduledDepartureTimeAsc("SU100", date1);
+        assertThat(flightsDate1).hasSize(1);
+        assertThat(flightsDate1.get(0).getFlightDate()).isEqualTo(date1);
+
+        List<Flight> flightsDate2 = flightRepository.findByFlightIataAndFlightDateOrderByScheduledDepartureTimeAsc("SU100", date2);
+        assertThat(flightsDate2).hasSize(1);
+        assertThat(flightsDate2.get(0).getFlightDate()).isEqualTo(date2);
     }
 }
