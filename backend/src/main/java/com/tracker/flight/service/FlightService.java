@@ -1,6 +1,7 @@
 package com.tracker.flight.service;
 
 import com.tracker.flight.client.AviationApiClient;
+import com.tracker.flight.config.RedisConfig;
 import com.tracker.flight.client.exception.AviationAccessException;
 import com.tracker.flight.client.exception.AviationApiUnavailableException;
 import com.tracker.flight.client.exception.AviationRateLimitException;
@@ -382,28 +383,73 @@ public class FlightService {
                 .orElse(Collections.emptyList());
     }
 
+    private boolean isFlightDataFresh(
+            Flight flight,
+            boolean isDegraded
+    ) {
+        if (isDegraded) {
+            return false;
+        }
+
+        Instant lastSyncedAt = flight.getLastSyncedAt();
+
+        if (lastSyncedAt == null) {
+            return false;
+        }
+
+        Instant now = Instant.now();
+        Instant freshnessLimit =
+                now.minus(RedisConfig.FLIGHTS_TTL);
+
+        return !lastSyncedAt.isBefore(freshnessLimit)
+                && !lastSyncedAt.isAfter(now);
+    }
+
     private FlightResponseDto mapToFlightResponseDto(
             Flight flight,
             boolean isDegraded
     ) {
+        Instant lastSyncedAt = flight.getLastSyncedAt();
+
+        boolean dataFresh =
+                isFlightDataFresh(flight, isDegraded);
+
         return FlightResponseDto.builder()
                 .flightIata(flight.getFlightIata())
+                .flightDate(flight.getFlightDate())
+
                 .departureAirport(flight.getDepartureIata())
                 .departureCity(flight.getDepartureCity())
-                .departureAirportName(flight.getDepartureAirportName())
+                .departureAirportName(
+                        flight.getDepartureAirportName()
+                )
+
                 .arrivalAirport(flight.getArrivalIata())
                 .arrivalCity(flight.getArrivalCity())
-                .arrivalAirportName(flight.getArrivalAirportName())
-                .scheduledDeparture(flight.getScheduledDepartureTime())
-                .actualDeparture(flight.getActualDepartureTime())
-                .scheduledArrival(flight.getScheduledArrivalTime())
-                .actualArrival(flight.getActualArrivalTime())
+                .arrivalAirportName(
+                        flight.getArrivalAirportName()
+                )
+
+                .scheduledDeparture(
+                        flight.getScheduledDepartureTime()
+                )
+                .actualDeparture(
+                        flight.getActualDepartureTime()
+                )
+                .scheduledArrival(
+                        flight.getScheduledArrivalTime()
+                )
+                .actualArrival(
+                        flight.getActualArrivalTime()
+                )
                 .status(flight.getStatus())
                 .delayMinutes(flight.getDelayMinutes())
                 .isDegraded(isDegraded)
+                .dataFresh(dataFresh)
+                .lastSyncedAt(lastSyncedAt)
                 .lastUpdated(
-                        flight.getLastSyncedAt() != null
-                                ? flight.getLastSyncedAt()
+                        lastSyncedAt != null
+                                ? lastSyncedAt
                                 : flight.getUpdatedAt()
                 )
                 .build();

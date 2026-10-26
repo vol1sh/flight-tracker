@@ -1,7 +1,9 @@
 package com.tracker.flight.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Schema(description = "Консолидированная информация о рейсе и текущей задержке")
 public class FlightResponseDto {
@@ -51,6 +53,15 @@ public class FlightResponseDto {
     @Schema(description = "Время последней синхронизации записи")
     private Instant lastUpdated;
 
+    @Schema(description = "Дата выполнения рейса", example = "2026-10-26")
+    private LocalDate flightDate;
+
+    @Schema(description = "Время последнего подтверждённого получения данных от AviationStack")
+    private Instant lastSyncedAt;
+
+    @Schema( description = "Данные получены в пределах допустимого периода актуальности", example = "true")
+    private boolean dataFresh;
+
     public FlightResponseDto() {}
 
     public FlightResponseDto(String flightIata, String departureAirport, String departureCity, String departureAirportName,
@@ -75,6 +86,50 @@ public class FlightResponseDto {
         this.lastUpdated = lastUpdated;
     }
 
+
+    public FlightResponseDto(
+            String flightIata,
+            String departureAirport,
+            String departureCity,
+            String departureAirportName,
+            String arrivalAirport,
+            String arrivalCity,
+            String arrivalAirportName,
+            Instant scheduledDeparture,
+            Instant actualDeparture,
+            Instant scheduledArrival,
+            Instant actualArrival,
+            String status,
+            Integer delayMinutes,
+            boolean isDegraded,
+            Instant lastUpdated,
+            LocalDate flightDate,
+            Instant lastSyncedAt,
+            boolean dataFresh
+    ) {
+        this(
+                flightIata,
+                departureAirport,
+                departureCity,
+                departureAirportName,
+                arrivalAirport,
+                arrivalCity,
+                arrivalAirportName,
+                scheduledDeparture,
+                actualDeparture,
+                scheduledArrival,
+                actualArrival,
+                status,
+                delayMinutes,
+                isDegraded,
+                lastUpdated
+        );
+
+        this.flightDate = flightDate;
+        this.lastSyncedAt = lastSyncedAt;
+        this.dataFresh = dataFresh;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -95,6 +150,9 @@ public class FlightResponseDto {
         private Integer delayMinutes = 0;
         private boolean isDegraded = false;
         private Instant lastUpdated;
+        private LocalDate flightDate;
+        private Instant lastSyncedAt;
+        private boolean dataFresh = false;
 
         public Builder flightIata(String flightIata) { this.flightIata = flightIata; return this; }
         public Builder departureAirport(String departureAirport) { this.departureAirport = departureAirport; return this; }
@@ -112,11 +170,43 @@ public class FlightResponseDto {
         public Builder isDegraded(boolean isDegraded) { this.isDegraded = isDegraded; return this; }
         public Builder lastUpdated(Instant lastUpdated) { this.lastUpdated = lastUpdated; return this; }
 
+        public Builder flightDate(LocalDate flightDate) {
+            this.flightDate = flightDate;
+            return this;
+        }
+
+        public Builder lastSyncedAt(Instant lastSyncedAt) {
+            this.lastSyncedAt = lastSyncedAt;
+            return this;
+        }
+
+        public Builder dataFresh(boolean dataFresh) {
+            this.dataFresh = dataFresh;
+            return this;
+        }
+
+
         public FlightResponseDto build() {
-            return new FlightResponseDto(flightIata, departureAirport, departureCity, departureAirportName,
-                    arrivalAirport, arrivalCity, arrivalAirportName,
-                    scheduledDeparture, actualDeparture, scheduledArrival, actualArrival,
-                    status, delayMinutes, isDegraded, lastUpdated);
+            return new FlightResponseDto(
+                    flightIata,
+                    departureAirport,
+                    departureCity,
+                    departureAirportName,
+                    arrivalAirport,
+                    arrivalCity,
+                    arrivalAirportName,
+                    scheduledDeparture,
+                    actualDeparture,
+                    scheduledArrival,
+                    actualArrival,
+                    status,
+                    delayMinutes,
+                    isDegraded,
+                    lastUpdated,
+                    flightDate,
+                    lastSyncedAt,
+                    dataFresh
+            );
         }
     }
 
@@ -133,6 +223,16 @@ public class FlightResponseDto {
     public Instant getActualArrival() { return actualArrival; }
     public String getStatus() { return status; }
     public Integer getDelayMinutes() { return delayMinutes; }
+    @JsonProperty("isDegraded")
     public boolean isDegraded() { return isDegraded; }
     public Instant getLastUpdated() { return lastUpdated; }
+    public LocalDate getFlightDate() {
+        return flightDate;
+    }
+    public Instant getLastSyncedAt() {
+        return lastSyncedAt;
+    }
+    public boolean isDataFresh() {
+        return dataFresh;
+    }
 }
