@@ -8,6 +8,8 @@ import com.tracker.flight.dto.ExternalFlightDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
@@ -29,6 +31,7 @@ import static org.springframework.test.web.client.ExpectedCount.manyTimes;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.hamcrest.Matchers.containsString;
 
 /**
  * Проверяет контракт ошибок AviationApiClient на реальном HTTP-уровне (MockRestServiceServer)
@@ -302,5 +305,23 @@ class AviationApiClientContractTest {
 
         assertThat(dto.isFallbackData()).isFalse();
         assertThat(cache().get("SU100:" + DATE)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Дата запрещена тарифом, без даты нет данных: ошибка доступа вместо 404")
+    void dateFilterRejectedAndEmptyData_ShouldBeAccessError() {
+        server.expect(manyTimes(), requestTo(containsString("flight_date=")))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"error\":{\"code\":\"function_access_restricted\"}}"));
+
+        server.expect(manyTimes(), requestTo(org.hamcrest.Matchers.not(
+                        containsString("flight_date="))))
+                .andRespond(withSuccess("{\"data\":[]}", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationAccessException.class);
+
+        assertThat(cache().get("SU100:" + DATE)).isNull();
     }
 }
