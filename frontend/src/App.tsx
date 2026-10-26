@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { FormEvent } from 'react';
 import {
   Search,
+  Calendar,
   Clock,
   AlertCircle,
   History,
@@ -27,6 +28,7 @@ function formatStatusLabel(status?: string | null): string {
   if (!status) return '—';
   const map: Record<string, string> = {
     SCHEDULED: 'Запланирован',
+    ACTIVE: 'В полёте',
     ON_TIME: 'По расписанию',
     DELAYED: 'Задержан',
     CANCELLED: 'Отменён',
@@ -38,17 +40,23 @@ function formatStatusLabel(status?: string | null): string {
 
 function statusColor(status?: string | null): string {
   switch (status?.toUpperCase()) {
-    case 'DELAYED': return 'bg-amber-50 text-amber-600 border-amber-200';
-    case 'CANCELLED': return 'bg-rose-50 text-rose-600 border-rose-200';
+    case 'DELAYED':
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'CANCELLED':
+      return 'bg-red-100 text-red-700 border-red-300';
+    case 'ACTIVE':
     case 'ON_TIME':
-    case 'LANDED': return 'bg-emerald-50 text-emerald-600 border-emerald-200';
-    case 'SCHEDULED': return 'bg-blue-50 text-blue-600 border-blue-200';
-    default: return 'bg-slate-100 text-slate-600 border-slate-200';
+    case 'LANDED':
+      return 'bg-emerald-50 text-emerald-600 border-emerald-200';
+    case 'SCHEDULED':
+      return 'bg-blue-50 text-blue-600 border-blue-200';
+    default:
+      return 'bg-slate-100 text-slate-600 border-slate-200';
   }
 }
 
-function formatDelay(minutes: number): string {
-  if (minutes <= 0) return '0 мин';
+function formatDelay(minutes?: number | null): string {
+  if (!minutes || minutes <= 0) return '0 мин';
   const mod10 = minutes % 10;
   const mod100 = minutes % 100;
   let unit = 'минут';
@@ -186,9 +194,9 @@ function SplashScreen({ phase }: { phase: 'flying' | 'fading' | 'done' }) {
 
 function RouteArc() {
   return (
-    <div className="relative flex items-center justify-center py-3 sm:py-0 w-full min-w-[120px] sm:min-w-[180px]">
+    <div className="relative flex items-center justify-center py-2 sm:py-0 w-full min-w-[120px] sm:min-w-[180px]">
       <svg
-        className="w-full h-16"
+        className="w-full h-14 sm:h-16"
         viewBox="0 0 200 55"
         fill="none"
         preserveAspectRatio="xMidYMid meet"
@@ -348,7 +356,7 @@ function EmptyStateScreen() {
           Готовы к отслеживанию перелёта
         </h3>
         <p className="text-[14px] text-slate-500 mt-2 leading-relaxed">
-          Введите номер рейса в строку поиска выше или выберите борт из списка ближайших рейсов, чтобы получить телеметрию, отклонения от расписания и историю статусов.
+          Введите номер рейса, выберите дату вылета в форме выше или нажмите на борт из списка, чтобы получить телеметрию, актуальность синхронизации и историю статусов.
         </p>
       </div>
     </section>
@@ -359,6 +367,7 @@ export default function App() {
   const [splash, setSplash] = useState<'flying' | 'fading' | 'done'>('flying');
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [flightQuery, setFlightQuery] = useState('');
+  const [flightDate, setFlightDate] = useState('');
   const [flightData, setFlightData] = useState<FlightResponse | null>(null);
   const [historyLogs, setHistoryLogs] = useState<FlightStatusLog[]>([]);
   const [activeFlights, setActiveFlights] = useState<ActiveFlight[]>([]);
@@ -368,6 +377,7 @@ export default function App() {
   const [mskClock, setMskClock] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   const scrollActive = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -379,7 +389,10 @@ export default function App() {
   useEffect(() => {
     const t1 = setTimeout(() => setSplash('fading'), 2700);
     const t2 = setTimeout(() => setSplash('done'), 3200);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
   useEffect(() => {
@@ -403,8 +416,8 @@ export default function App() {
     try {
       const res = await fetch('/api/v1/flights/active');
       if (res.ok) {
-        const data: ActiveFlight[] = await res.json();
-        setActiveFlights(data);
+        const data = await res.json();
+        setActiveFlights(Array.isArray(data) ? data : []);
       }
     } catch {
       // игнорируем ошибки списка активных
@@ -421,28 +434,53 @@ export default function App() {
     fetchActiveFlights();
   }, []);
 
-  const fetchFlight = async (iata: string) => {
+  const fetchFlight = async (iata: string, date: string) => {
     const code = iata.trim().toUpperCase();
-    if (!code) return;
+    if (!code || !date) {
+      if (!date) {
+        setErrorMessage('Выберите дату вылета рейса');
+      }
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage(null);
+
+    const params = new URLSearchParams({ date });
+
     try {
       const [fRes, hRes] = await Promise.all([
-        fetch(`/api/v1/flights/${code}`),
-        fetch(`/api/v1/flights/${code}/history`),
+        fetch(`/api/v1/flights/${encodeURIComponent(code)}?${params}`),
+        fetch(`/api/v1/flights/${encodeURIComponent(code)}/history?${params}`),
       ]);
-      if (!fRes.ok)
-        throw new Error(
-          fRes.status === 404
-            ? `Рейс ${code} не найден`
-            : `Ошибка сервера (HTTP ${fRes.status})`,
-        );
+
+      if (!fRes.ok) {
+        setFlightData(null);
+        setHistoryLogs([]);
+        if (fRes.status === 400) {
+          setErrorMessage('Неверный номер рейса или формат даты');
+        } else if (fRes.status === 404) {
+          setErrorMessage('Рейс на указанную дату не найден');
+        } else if (fRes.status === 429) {
+          setErrorMessage('Превышен лимит запросов к поставщику данных. Попробуйте позже');
+        } else if (fRes.status === 503) {
+          setErrorMessage('Данные временно недоступны');
+        } else {
+          setErrorMessage(`Ошибка сервера (HTTP ${fRes.status})`);
+        }
+        return;
+      }
+
       const fData: FlightResponse = await fRes.json();
-      const hData: FlightStatusLog[] = hRes.ok ? await hRes.json() : [];
+      let hData: FlightStatusLog[] = [];
+      if (hRes.ok) {
+        const parsedHistory = await hRes.json();
+        hData = Array.isArray(parsedHistory) ? parsedHistory : [];
+      }
       setFlightData(fData);
       setHistoryLogs(hData);
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Не удалось загрузить данные');
+    } catch {
+      setErrorMessage('Не удалось подключиться к серверу. Проверьте соединение с сетью');
       setFlightData(null);
       setHistoryLogs([]);
     } finally {
@@ -452,7 +490,21 @@ export default function App() {
 
   const onSearchSubmit = (e: FormEvent) => {
     e.preventDefault();
-    fetchFlight(flightQuery);
+    fetchFlight(flightQuery, flightDate);
+  };
+
+  const handleQuickSelect = (code: string, presetDate?: string) => {
+    setFlightQuery(code);
+    const targetDate = presetDate || flightDate;
+    if (presetDate) {
+      setFlightDate(presetDate);
+    }
+    if (!targetDate) {
+      setErrorMessage(`Для поиска рейса ${code} выберите дату вылета в поле даты`);
+      dateInputRef.current?.focus();
+      return;
+    }
+    fetchFlight(code, targetDate);
   };
 
   const fmtTime = (iso?: string | null) => {
@@ -464,22 +516,33 @@ export default function App() {
         minute: '2-digit',
         hour12: false,
       });
-    } catch { return iso; }
+    } catch {
+      return iso;
+    }
   };
 
   const fmtDate = (iso?: string | null) => {
     if (!iso) return '—';
     try {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+        const [y, m, d] = iso.split('-');
+        return `${d}.${m}.${y}`;
+      }
       return new Date(iso).toLocaleDateString('ru-RU', {
         timeZone: 'Europe/Moscow',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
       });
-    } catch { return iso; }
+    } catch {
+      return iso;
+    }
   };
 
-  const degraded = Boolean(flightData?.degraded || flightData?.isDegraded);
+  const isDataStale = flightData ? flightData.dataFresh === false : false;
+  const degraded = Boolean(flightData?.isDegraded || isDataStale);
+  const syncTimestamp = flightData?.lastSyncedAt ?? flightData?.lastUpdated ?? null;
+
   const depCity = flightData?.departureCity || flightData?.departureAirport || '—';
   const depAirportName = flightData?.departureAirportName || '';
   const arrCity = flightData?.arrivalCity || flightData?.arrivalAirport || '—';
@@ -495,7 +558,7 @@ export default function App() {
       <header className="sticky top-0 z-30">
         <div className="h-1 bg-gradient-to-r from-blue-400 via-blue-600 to-indigo-500" />
         <div className="bg-white/95 backdrop-blur-lg border-b border-slate-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <div className="max-w-5xl mx-auto flex items-center justify-between px-5 sm:px-6 py-4">
+          <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3.5">
               <div className="animate-float">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-500/20">
@@ -514,15 +577,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-[13px]">
-              <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200/80 font-mono">
+            <div className="flex items-center gap-2 sm:gap-3 text-[13px]">
+              <div className="flex items-center gap-2 bg-slate-50 px-3 sm:px-3.5 py-2 rounded-xl border border-slate-200/80 font-mono">
                 <Clock className="w-4 h-4 text-blue-500" />
-                <span className="font-semibold text-slate-800 text-[14px]">{mskClock || '--:--:--'}</span>
+                <span className="font-semibold text-slate-800 text-[13px] sm:text-[14px]">
+                  {mskClock || '--:--:--'}
+                </span>
                 <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-md font-sans font-bold tracking-wide">
                   MSK
                 </span>
               </div>
-              <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+              <div className="flex items-center gap-2 px-3 sm:px-3.5 py-2 rounded-xl bg-white border border-slate-200/80 shadow-sm">
                 <span
                   className={`w-2.5 h-2.5 rounded-full ${
                     systemStatus?.status === 'UP'
@@ -551,14 +616,31 @@ export default function App() {
                 type="text"
                 value={flightQuery}
                 onChange={(e) => setFlightQuery(e.target.value.toUpperCase())}
-                placeholder="Номер рейса, например 4V5023 или SAS4039"
+                required
+                aria-label="Номер рейса"
+                placeholder="Номер рейса, например SU100 или 4V5023"
                 className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-12 pr-4 py-3.5 text-[15px] text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-3 focus:ring-blue-100 transition-all font-mono uppercase tracking-wider"
               />
             </div>
+
+            <div className="relative sm:w-52">
+              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400 pointer-events-none" />
+              <input
+                ref={dateInputRef}
+                id="flight-date-input"
+                type="date"
+                value={flightDate}
+                onChange={(e) => setFlightDate(e.target.value)}
+                required
+                aria-label="Дата рейса"
+                className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-11 pr-3 py-3.5 text-[15px] text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-3 focus:ring-blue-100 transition-all font-mono"
+              />
+            </div>
+
             <button
               id="flight-search-btn"
               type="submit"
-              disabled={isLoading || !flightQuery.trim()}
+              disabled={isLoading}
               className="bg-blue-600 hover:bg-blue-700 active:scale-[0.97] disabled:opacity-50 text-white text-[15px] font-semibold px-7 py-3.5 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer flex items-center justify-center gap-2"
             >
               {isLoading ? (
@@ -575,12 +657,12 @@ export default function App() {
             </button>
           </form>
 
-          {/* Ближайшие рейсы: компактная горизонтальная лента в одну строку с кнопками прокрутки */}
+          {/* Ближайшие рейсы или демонстрационные примеры */}
           <div className="mt-4 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between gap-2 mb-2.5">
               <div className="flex items-center gap-2">
                 <span className="text-[13px] font-semibold text-slate-700">
-                  Ближайшие рейсы:
+                  {activeFlights.length > 0 ? 'Ближайшие рейсы:' : 'Демонстрационные примеры рейсов:'}
                 </span>
                 <div className="flex items-center gap-1">
                   <button
@@ -628,10 +710,7 @@ export default function App() {
                     <button
                       key={af.callsign}
                       type="button"
-                      onClick={() => {
-                        setFlightQuery(af.callsign);
-                        fetchFlight(af.callsign);
-                      }}
+                      onClick={() => handleQuickSelect(af.callsign, af.flightDate)}
                       className="group flex-shrink-0 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-blue-50 hover:border-blue-200 border border-slate-200/80 transition-all cursor-pointer flex items-center gap-2 text-left whitespace-nowrap"
                     >
                       <span className="font-mono font-bold text-[13px] text-slate-800 group-hover:text-blue-600">
@@ -650,10 +729,14 @@ export default function App() {
                   <button
                     key={code}
                     type="button"
-                    onClick={() => { setFlightQuery(code); fetchFlight(code); }}
-                    className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-blue-50 hover:text-blue-600 text-slate-600 transition-colors cursor-pointer border border-slate-200/80 text-[13px] font-mono whitespace-nowrap"
+                    onClick={() => handleQuickSelect(code)}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-blue-50 hover:text-blue-600 text-slate-600 transition-colors cursor-pointer border border-dashed border-slate-300 text-[13px] font-mono whitespace-nowrap inline-flex items-center gap-1.5"
+                    title="Демонстрационный код рейса (выберите дату и нажмите)"
                   >
-                    {code}
+                    <span>{code}</span>
+                    <span className="text-[10px] font-sans uppercase px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-500">
+                      демо
+                    </span>
                   </button>
                 ))
               )}
@@ -663,17 +746,46 @@ export default function App() {
 
         {/* Error */}
         {errorMessage && (
-          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[14px] flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-            <span>{errorMessage}</span>
+          <div
+            role="alert"
+            className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[14px] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {flightQuery.trim() && flightDate && (
+                <button
+                  type="button"
+                  onClick={() => fetchFlight(flightQuery, flightDate)}
+                  className="px-3.5 py-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-[13px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  Повторить поиск
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setErrorMessage(null)}
+                className="px-3 py-1.5 rounded-lg bg-white/80 hover:bg-white text-slate-600 text-[13px] font-medium border border-rose-200 transition-colors cursor-pointer"
+              >
+                Сбросить
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Degraded warning */}
-        {degraded && (
-          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-[14px] flex items-center gap-3">
+        {/* Degraded / Stale Data Warning */}
+        {flightData && degraded && (
+          <div
+            role="status"
+            className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[14px] flex items-center gap-3"
+          >
             <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />
-            <span>Внешний поставщик данных недоступен — отображаются кэшированные данные.</span>
+            <span>
+              Внимание: внешний поставщик данных временно недоступен или данные устарели — отображаются ранее сохранённые данные.
+            </span>
           </div>
         )}
 
@@ -684,34 +796,58 @@ export default function App() {
         {flightData && (
           <section className="animate-fade-in-up-d1 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(37,99,235,0.03)] overflow-hidden">
             <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-slate-50/80 to-white">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-[32px] font-extrabold font-mono tracking-wider text-slate-900 leading-none">
                   {flightData.flightIata}
                 </h1>
-                <span className={`inline-flex items-center text-[12px] px-3 py-1 rounded-lg font-semibold border ${statusColor(flightData.status)}`}>
+                <span
+                  className={`inline-flex items-center text-[12px] px-3 py-1 rounded-lg font-semibold border ${statusColor(
+                    flightData.status,
+                  )}`}
+                >
                   {formatStatusLabel(flightData.status)}
                 </span>
+                {flightData.flightDate && (
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-mono px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+                    Дата рейса: {flightData.flightDate}
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-2.5 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-slate-500 text-[13px] font-medium">Задержка:</span>
-                <span className={`font-mono font-bold text-[14px] ${
-                  flightData.delayMinutes > 0 ? 'text-amber-600' : 'text-emerald-600'
-                }`}>
-                  {formatDelay(flightData.delayMinutes)}
-                </span>
+
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+                  <span className="text-slate-500 text-[13px] font-medium">Задержка:</span>
+                  <span
+                    className={`font-mono font-bold text-[14px] ${
+                      (flightData.delayMinutes ?? 0) > 0 ? 'text-amber-600' : 'text-emerald-600'
+                    }`}
+                  >
+                    {formatDelay(flightData.delayMinutes)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    fetchFlight(flightData.flightIata, flightDate || flightData.flightDate)
+                  }
+                  disabled={isLoading}
+                  title="Повторить запрос статуса"
+                  className="p-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-600 hover:text-blue-600 border border-slate-200 shadow-sm transition-colors cursor-pointer"
+                >
+                  <RotateCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
               </div>
             </div>
 
             <div className="p-6">
-              <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-3 sm:gap-6">
-                {/* Отправление (Выровнено по структуре и высоте) */}
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-stretch gap-4 sm:gap-6">
+                {/* Отправление */}
                 <div className="bg-gradient-to-b from-slate-50 to-white p-5 rounded-2xl border border-slate-200/70 shadow-sm flex flex-col justify-between">
                   <div>
                     <div className="flex items-center gap-1.5 text-[12px] text-slate-500 uppercase font-semibold tracking-wide">
                       <PlaneTakeoff className="w-4 h-4 text-blue-500" />
                       Вылет
                     </div>
-                    {/* Фиксированная высота блока с кодом и именем аэропорта */}
                     <div className="mt-2.5 min-h-[66px] flex flex-col justify-start">
                       <span className="text-[28px] font-extrabold font-mono text-slate-900 leading-none">
                         {flightData.departureAirport}
@@ -730,11 +866,15 @@ export default function App() {
                   <div className="mt-4 pt-3 border-t border-slate-200/60 space-y-2.5">
                     <div className="flex justify-between text-[13px]">
                       <span className="text-slate-500">По расписанию</span>
-                      <span className="font-mono font-semibold text-slate-800">{fmtTime(flightData.scheduledDeparture)}</span>
+                      <span className="font-mono font-semibold text-slate-800">
+                        {fmtTime(flightData.scheduledDeparture)}
+                      </span>
                     </div>
                     <div className="flex justify-between text-[13px]">
                       <span className="text-slate-500">Фактическое</span>
-                      <span className="font-mono font-semibold text-blue-600">{fmtTime(flightData.actualDeparture)}</span>
+                      <span className="font-mono font-semibold text-blue-600">
+                        {fmtTime(flightData.actualDeparture)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -744,14 +884,13 @@ export default function App() {
                   <RouteArc />
                 </div>
 
-                {/* Прибытие (Выровнено по структуре и высоте) */}
+                {/* Прибытие */}
                 <div className="bg-gradient-to-b from-slate-50 to-white p-5 rounded-2xl border border-slate-200/70 shadow-sm flex flex-col justify-between">
                   <div>
                     <div className="flex items-center gap-1.5 text-[12px] text-slate-500 uppercase font-semibold tracking-wide">
                       <PlaneLanding className="w-4 h-4 text-blue-500" />
                       Прилёт
                     </div>
-                    {/* Фиксированная высота блока с кодом и именем аэропорта */}
                     <div className="mt-2.5 min-h-[66px] flex flex-col justify-start">
                       <span className="text-[28px] font-extrabold font-mono text-slate-900 leading-none">
                         {flightData.arrivalAirport}
@@ -770,19 +909,36 @@ export default function App() {
                   <div className="mt-4 pt-3 border-t border-slate-200/60 space-y-2.5">
                     <div className="flex justify-between text-[13px]">
                       <span className="text-slate-500">По расписанию</span>
-                      <span className="font-mono font-semibold text-slate-800">{fmtTime(flightData.scheduledArrival)}</span>
+                      <span className="font-mono font-semibold text-slate-800">
+                        {fmtTime(flightData.scheduledArrival)}
+                      </span>
                     </div>
                     <div className="flex justify-between text-[13px]">
                       <span className="text-slate-500">Фактическое</span>
-                      <span className="font-mono font-semibold text-blue-600">{fmtTime(flightData.actualArrival)}</span>
+                      <span className="font-mono font-semibold text-blue-600">
+                        {fmtTime(flightData.actualArrival)}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="px-6 py-3.5 bg-slate-50/60 border-t border-slate-100 text-[12px] font-mono text-slate-400 text-right">
-              Обновлено: {fmtDate(flightData.lastUpdated)} в {fmtTime(flightData.lastUpdated)} MSK
+            <div className="px-6 py-3.5 bg-slate-50/60 border-t border-slate-100 text-[12px] font-mono text-slate-500 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {degraded ? (
+                  <span className="inline-flex items-center gap-1.5 text-amber-700 bg-amber-100/80 border border-amber-300 px-2.5 py-0.5 rounded-md font-sans font-semibold">
+                    Устаревшие данные (кэш БД)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md font-sans font-semibold">
+                    Данные актуальны
+                  </span>
+                )}
+              </div>
+              <div>
+                Последняя синхронизация: {fmtDate(syncTimestamp)} в {fmtTime(syncTimestamp)} MSK
+              </div>
             </div>
           </section>
         )}
@@ -802,7 +958,7 @@ export default function App() {
             </div>
             {historyLogs.length === 0 ? (
               <p className="text-[14px] text-slate-400 py-10 text-center">
-                Изменений статуса не зафиксировано.
+                История изменений отсутствует
               </p>
             ) : (
               <div className="overflow-x-auto max-h-72 overflow-y-auto">
