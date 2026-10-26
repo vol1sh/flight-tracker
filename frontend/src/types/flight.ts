@@ -1,7 +1,8 @@
 export interface FlightResponse {
   flightIata: string;
-  status: 'ON_TIME' | 'DELAYED' | 'CANCELLED' | string;
-  delayMinutes: number;
+  flightDate: string;
+  status: 'SCHEDULED' | 'ACTIVE' | 'ON_TIME' | 'DELAYED' | 'LANDED' | 'CANCELLED' | string;
+  delayMinutes: number | null;
   departureAirport: string;
   departureCity?: string;
   departureAirportName?: string;
@@ -13,17 +14,21 @@ export interface FlightResponse {
   scheduledArrival: string | null;
   actualArrival: string | null;
   lastUpdated: string | null;
-  degraded?: boolean;
+  lastSyncedAt?: string | null;
+  dataFresh: boolean;
   isDegraded?: boolean;
 }
+
 export interface FlightStatusLog {
   recordedAt: string;
   previousStatus: string | null;
   newStatus: string;
   delayMinutes: number;
 }
+
 export interface ActiveFlight {
   callsign: string;
+  flightDate?: string;
   originIata?: string;
   originCity?: string;
   destIata?: string;
