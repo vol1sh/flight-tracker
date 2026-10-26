@@ -13,7 +13,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Collections;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,7 +33,8 @@ class FlightPollerSchedulerTest {
     @Test
     @DisplayName("Опрос не вызывается, если список активных рейсов пуст")
     void pollActiveFlights_WhenNoActiveFlights_ShouldNotCallFlightService() {
-        when(flightRepository.findByStatusNotIn(anyCollection())).thenReturn(Collections.emptyList());
+
+        when(flightRepository.findByStatusNotIn(anyList())).thenReturn(Collections.emptyList());
 
         flightPollerScheduler.pollActiveFlights();
 
@@ -45,7 +47,7 @@ class FlightPollerSchedulerTest {
         Flight flight1 = Flight.builder().flightIata("SU-100").status("SCHEDULED").build();
         Flight flight2 = Flight.builder().flightIata("BA-202").status("DELAYED").build();
 
-        when(flightRepository.findByStatusNotIn(anyCollection())).thenReturn(List.of(flight1, flight2));
+        when(flightRepository.findByStatusNotIn(anyList())).thenReturn(List.of(flight1, flight2));
 
         flightPollerScheduler.pollActiveFlights();
 
@@ -59,7 +61,7 @@ class FlightPollerSchedulerTest {
         Flight flight1 = Flight.builder().flightIata("SU-100").status("SCHEDULED").build();
         Flight flight2 = Flight.builder().flightIata("BA-202").status("SCHEDULED").build();
 
-        when(flightRepository.findByStatusNotIn(anyCollection())).thenReturn(List.of(flight1, flight2));
+        when(flightRepository.findByStatusNotIn(anyList())).thenReturn(List.of(flight1, flight2));
         when(flightService.syncAndGetFlight("SU-100")).thenThrow(new RuntimeException("External API failure"));
 
         flightPollerScheduler.pollActiveFlights();
