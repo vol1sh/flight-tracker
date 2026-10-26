@@ -124,30 +124,46 @@ public class FlightService {
         if (existingFlightOpt.isPresent()) {
             flight = existingFlightOpt.get();
 
+            String updatedStatus = externalDto.getStatus() != null
+                    && !externalDto.getStatus().isBlank()
+                    ? externalDto.getStatus()
+                    : flight.getStatus();
+
+            Integer updatedDelay = externalDto.getDelayMinutes() != null
+                    ? externalDto.getDelayMinutes()
+                    : flight.getDelayMinutes();
+
             boolean statusChanged =
-                    !Objects.equals(flight.getStatus(), externalDto.getStatus());
+                    !Objects.equals(flight.getStatus(), updatedStatus);
 
             boolean delayChanged =
-                    !Objects.equals(
-                            flight.getDelayMinutes(),
-                            externalDto.getDelayMinutes()
-                    );
+                    !Objects.equals(flight.getDelayMinutes(), updatedDelay);
 
             if (statusChanged || delayChanged) {
+                if (updatedDelay == null) {
+                    log.warn(
+                            "Рейс {} на дату {}: обновление пропущено, задержка неизвестна для записи истории",
+                            cleanFlight,
+                            flightDate
+                    );
+
+                    return returnSavedFlightOr503(cleanFlight, existingFlightOpt);
+                }
+
                 log.info(
                         "Аудит рейса {}: статус '{}' -> '{}', задержка {} -> {} мин",
                         cleanFlight,
                         flight.getStatus(),
-                        externalDto.getStatus(),
+                        updatedStatus,
                         flight.getDelayMinutes(),
-                        externalDto.getDelayMinutes()
+                        updatedDelay
                 );
 
                 FlightStatusLog statusLog = FlightStatusLog.builder()
                         .flight(flight)
                         .previousStatus(flight.getStatus())
-                        .newStatus(externalDto.getStatus())
-                        .delayMinutes(externalDto.getDelayMinutes())
+                        .newStatus(updatedStatus)
+                        .delayMinutes(updatedDelay)
                         .build();
 
                 logRepository.save(statusLog);
@@ -181,8 +197,8 @@ public class FlightService {
                 );
             }
 
-            flight.setStatus(externalDto.getStatus());
-            flight.setDelayMinutes(externalDto.getDelayMinutes());
+            flight.setStatus(updatedStatus);
+            flight.setDelayMinutes(updatedDelay);
 
             if (externalDto.getFetchedAt() != null) {
                 flight.setLastSyncedAt(externalDto.getFetchedAt());
@@ -214,57 +230,44 @@ public class FlightService {
 
             flight = flightRepository.save(flight);
         } else {
+            boolean hasRequiredData = externalDto.getStatus() != null
+                    && !externalDto.getStatus().isBlank()
+                    && externalDto.getDepartureAirport() != null
+                    && externalDto.getDepartureAirport().matches("[A-Z]{3}")
+                    && externalDto.getArrivalAirport() != null
+                    && externalDto.getArrivalAirport().matches("[A-Z]{3}")
+                    && externalDto.getScheduledDeparture() != null
+                    && externalDto.getScheduledArrival() != null
+                    && externalDto.getDelayMinutes() != null;
+
+            if (!hasRequiredData) {
+                log.warn(
+                        "Рейс {} на дату {}: source=NONE, неполный ответ API, status=503",
+                        cleanFlight,
+                        flightDate
+                );
+
+                throw new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        "Поставщик вернул неполные данные рейса, сохранённой записи нет"
+                );
+            }
+
             flight = Flight.builder()
-                    .flightIata(
-                            externalDto.getFlightIata() != null
-                                    ? externalDto.getFlightIata()
-                                    : cleanFlight
-                    )
+                    .flightIata(cleanFlight)
                     .flightDate(flightDate)
-                    .departureIata(
-                            externalDto.getDepartureAirport() != null
-                                    ? externalDto.getDepartureAirport()
-                                    : "—"
-                    )
+                    .departureIata(externalDto.getDepartureAirport())
                     .departureCity(externalDto.getDepartureCity())
-                    .departureAirportName(
-                            externalDto.getDepartureAirportName()
-                    )
-                    .arrivalIata(
-                            externalDto.getArrivalAirport() != null
-                                    ? externalDto.getArrivalAirport()
-                                    : "—"
-                    )
+                    .departureAirportName(externalDto.getDepartureAirportName())
+                    .arrivalIata(externalDto.getArrivalAirport())
                     .arrivalCity(externalDto.getArrivalCity())
-                    .arrivalAirportName(
-                            externalDto.getArrivalAirportName()
-                    )
-                    .scheduledDepartureTime(
-                            externalDto.getScheduledDeparture() != null
-                                    ? externalDto.getScheduledDeparture()
-                                    : Instant.now()
-                    )
-                    .actualDepartureTime(
-                            externalDto.getActualDeparture()
-                    )
-                    .scheduledArrivalTime(
-                            externalDto.getScheduledArrival() != null
-                                    ? externalDto.getScheduledArrival()
-                                    : Instant.now()
-                    )
-                    .actualArrivalTime(
-                            externalDto.getActualArrival()
-                    )
-                    .status(
-                            externalDto.getStatus() != null
-                                    ? externalDto.getStatus()
-                                    : "UNKNOWN_DEGRADED"
-                    )
-                    .delayMinutes(
-                            externalDto.getDelayMinutes() != null
-                                    ? externalDto.getDelayMinutes()
-                                    : 0
-                    )
+                    .arrivalAirportName(externalDto.getArrivalAirportName())
+                    .scheduledDepartureTime(externalDto.getScheduledDeparture())
+                    .actualDepartureTime(externalDto.getActualDeparture())
+                    .scheduledArrivalTime(externalDto.getScheduledArrival())
+                    .actualArrivalTime(externalDto.getActualArrival())
+                    .status(externalDto.getStatus())
+                    .delayMinutes(externalDto.getDelayMinutes())
                     .lastSyncedAt(externalDto.getFetchedAt())
                     .build();
 
