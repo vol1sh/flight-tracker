@@ -35,6 +35,8 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.hamcrest.Matchers.containsString;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Проверяет контракт ошибок AviationApiClient на реальном HTTP-уровне (MockRestServiceServer)
@@ -483,6 +485,21 @@ class AviationApiClientContractTest {
 
         assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
                 .isInstanceOf(AviationAccessException.class);
+
+        assertThat(cache().get("SU100:" + DATE)).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "\"iata\":\"LED\",",
+            "\"iata\":\"SVO\","
+    })
+    @DisplayName("Отсутствует код одного из аэропортов: ответ отклоняется и не кэшируется")
+    void missingAirportCode_ShouldBeUnavailable(String airportField) {
+        respondOk(FLIGHT_JSON.replace(airportField, ""));
+
+        assertThatThrownBy(() -> client.fetchLiveFlight("SU100", DATE))
+                .isInstanceOf(AviationApiUnavailableException.class);
 
         assertThat(cache().get("SU100:" + DATE)).isNull();
     }
