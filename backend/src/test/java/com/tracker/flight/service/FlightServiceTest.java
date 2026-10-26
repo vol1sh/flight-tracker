@@ -1,14 +1,13 @@
 package com.tracker.flight.service;
 
 import com.tracker.flight.client.AviationApiClient;
+import com.tracker.flight.client.exception.AviationApiUnavailableException;
 import com.tracker.flight.dto.ExternalFlightDto;
 import com.tracker.flight.dto.FlightResponseDto;
 import com.tracker.flight.entity.Flight;
 import com.tracker.flight.entity.FlightStatusLog;
 import com.tracker.flight.repository.FlightRepository;
 import com.tracker.flight.repository.FlightStatusLogRepository;
-import com.tracker.flight.client.exception.AviationApiUnavailableException;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,24 +15,25 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
-import java.time.Instant;
-import java.util.Optional;
-import java.util.Locale;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
-
 import org.springframework.web.server.ResponseStatusException;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("Unit-тестирование бизнес-логики FlightService")
+@DisplayName("Тестирование бизнес-логики FlightService")
 class FlightServiceTest {
+
+    private static final LocalDate FLIGHT_DATE =
+            LocalDate.of(2026, 10, 25);
 
     @Mock
     private AviationApiClient aviationApiClient;
@@ -48,68 +48,172 @@ class FlightServiceTest {
     private FlightService flightService;
 
     @Test
-    @DisplayName("lastSyncedAt берётся из fetchedAt клиента — момента реального получения данных от поставщика")
+    @DisplayName("Одинаковый номер за разные дни имеет разные статусы и историю")
+    void sameNumberOnDifferentDates_ShouldNotMixStatusOrHistory() {
+        LocalDate otherDate = FLIGHT_DATE.plusDays(1);
+
+        Flight first = Flight.builder()
+                .id(1L)
+                .flightIata("SU100")
+                .flightDate(FLIGHT_DATE)
+                .status("LANDED")
+                .build();
+
+        Flight second = Flight.builder()
+                .id(2L)
+                .flightIata("SU100")
+                .flightDate(otherDate)
+                .status("CANCELLED")
+                .build();
+
+        when(flightRepository.findByFlightIataAndFlightDate(
+                "SU100", FLIGHT_DATE
+        )).thenReturn(Optional.of(first));
+
+        when(flightRepository.findByFlightIataAndFlightDate(
+                "SU100", otherDate
+        )).thenReturn(Optional.of(second));
+
+        when(logRepository.findByFlightIdOrderByRecordedAtDesc(1L))
+                .thenReturn(List.of(
+                        FlightStatusLog.builder()
+                                .flight(first)
+                                .newStatus("LANDED")
+                                .delayMinutes(0)
+                                .build()
+                ));
+
+        when(logRepository.findByFlightIdOrderByRecordedAtDesc(2L))
+                .thenReturn(List.of(
+                        FlightStatusLog.builder()
+                                .flight(second)
+                                .newStatus("CANCELLED")
+                                .delayMinutes(0)
+                                .build()
+                ));
+
+        assertThat(flightService
+                .syncAndGetFlight("SU100", FLIGHT_DATE)
+                .getStatus())
+                .isEqualTo("LANDED");
+
+        assertThat(flightService
+                .syncAndGetFlight("SU100", otherDate)
+                .getStatus())
+                .isEqualTo("CANCELLED");
+
+        assertThat(flightService
+                .getFlightHistory("SU100", FLIGHT_DATE)
+                .get(0)
+                .getNewStatus())
+                .isEqualTo("LANDED");
+
+        assertThat(flightService
+                .getFlightHistory("SU100", otherDate)
+                .get(0)
+                .getNewStatus())
+                .isEqualTo("CANCELLED");
+
+        verify(flightRepository, never())
+                .findByFlightIata(anyString());
+
+        verifyNoInteractions(aviationApiClient);
+    }
+
+    @Test
+    @DisplayName("Время синхронизации берётся из fetchedAt клиента")
     void syncAndGetFlight_ShouldStoreProviderFetchTimeAsLastSyncedAt() {
-        Instant fetchedAt = Instant.parse("2026-10-25T10:00:00Z");
+        Instant fetchedAt =
+                Instant.parse("2026-10-25T10:00:00Z");
+
         ExternalFlightDto externalDto = ExternalFlightDto.builder()
                 .flightIata("SU100")
                 .departureAirport("SVO")
                 .arrivalAirport("LED")
-                .scheduledDeparture(Instant.parse("2026-10-25T12:00:00Z"))
-                .scheduledArrival(Instant.parse("2026-10-25T13:30:00Z"))
+                .scheduledDeparture(
+                        Instant.parse("2026-10-25T12:00:00Z")
+                )
+                .scheduledArrival(
+                        Instant.parse("2026-10-25T13:30:00Z")
+                )
                 .status("SCHEDULED")
                 .delayMinutes(0)
                 .fetchedAt(fetchedAt)
                 .build();
 
-        when(aviationApiClient.fetchLiveFlight("SU100")).thenReturn(externalDto);
-        when(flightRepository.findByFlightIata("SU100")).thenReturn(Optional.empty());
-        when(flightRepository.save(any(Flight.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(flightRepository.findByFlightIataAndFlightDate(
+                "SU100", FLIGHT_DATE
+        )).thenReturn(Optional.empty());
 
-        flightService.syncAndGetFlight("SU100");
+        when(aviationApiClient.fetchLiveFlight("SU100", FLIGHT_DATE))
+                .thenReturn(externalDto);
 
-        ArgumentCaptor<Flight> flightCaptor = ArgumentCaptor.forClass(Flight.class);
-        verify(flightRepository).save(flightCaptor.capture());
-        assertThat(flightCaptor.getValue().getLastSyncedAt()).isEqualTo(fetchedAt);
+        when(flightRepository.save(any(Flight.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        flightService.syncAndGetFlight("SU100", FLIGHT_DATE);
+
+        ArgumentCaptor<Flight> captor =
+                ArgumentCaptor.forClass(Flight.class);
+
+        verify(flightRepository).save(captor.capture());
+
+        assertThat(captor.getValue().getLastSyncedAt())
+                .isEqualTo(fetchedAt);
     }
 
     @Test
-    @DisplayName("Degraded-ответ из БД показывает реальное время последней синхронизации, а не 'сейчас'")
+    @DisplayName("Fallback возвращает настоящее время последней синхронизации")
     void syncAndGetFlight_WhenProviderUnavailable_LastUpdatedIsRealSyncTime() {
-        Instant lastSync = Instant.parse("2026-10-25T08:00:00Z");
+        Instant lastSync =
+                Instant.parse("2026-10-25T08:00:00Z");
+
         Flight saved = Flight.builder()
                 .id(7L)
                 .flightIata("SU100")
+                .flightDate(FLIGHT_DATE)
                 .departureIata("SVO")
                 .arrivalIata("LED")
-                .scheduledDepartureTime(Instant.parse("2026-10-25T12:00:00Z"))
-                .scheduledArrivalTime(Instant.parse("2026-10-25T13:30:00Z"))
+                .scheduledDepartureTime(
+                        Instant.parse("2026-10-25T12:00:00Z")
+                )
+                .scheduledArrivalTime(
+                        Instant.parse("2026-10-25T13:30:00Z")
+                )
                 .status("SCHEDULED")
                 .delayMinutes(0)
                 .lastSyncedAt(lastSync)
                 .build();
 
-        when(flightRepository.findByFlightIata("SU100")).thenReturn(Optional.of(saved));
-        when(aviationApiClient.fetchLiveFlight("SU100"))
+        when(flightRepository.findByFlightIataAndFlightDate(
+                "SU100", FLIGHT_DATE
+        )).thenReturn(Optional.of(saved));
+
+        when(aviationApiClient.fetchLiveFlight("SU100", FLIGHT_DATE))
                 .thenThrow(new AviationApiUnavailableException("timeout"));
 
-        FlightResponseDto response = flightService.syncAndGetFlight("SU100");
+        FlightResponseDto response =
+                flightService.syncAndGetFlight("SU100", FLIGHT_DATE);
 
         assertThat(response.isDegraded()).isTrue();
         assertThat(response.getLastUpdated()).isEqualTo(lastSync);
     }
 
     @Test
-    @DisplayName("Первичное сохранение рейса: создает запись в flights и первый лог аудита")
+    @DisplayName("Новый рейс сохраняется с датой и начальным событием истории")
     void syncAndGetFlight_WhenFlightIsNew_ShouldSaveFlightAndCreateInitialLog() {
-        // Arrange
-        String flightIata = "SU-100";
+        String flightIata = "SU100";
+
         ExternalFlightDto externalDto = ExternalFlightDto.builder()
                 .flightIata(flightIata)
                 .departureAirport("SVO")
                 .arrivalAirport("LED")
-                .scheduledDeparture(Instant.now().plusSeconds(3600))
-                .scheduledArrival(Instant.now().plusSeconds(7200))
+                .scheduledDeparture(
+                        Instant.parse("2026-10-25T10:00:00Z")
+                )
+                .scheduledArrival(
+                        Instant.parse("2026-10-25T12:00:00Z")
+                )
                 .status("SCHEDULED")
                 .delayMinutes(0)
                 .isFallbackData(false)
@@ -118,45 +222,59 @@ class FlightServiceTest {
         Flight savedFlight = Flight.builder()
                 .id(1L)
                 .flightIata(flightIata)
+                .flightDate(FLIGHT_DATE)
                 .departureIata("SVO")
                 .arrivalIata("LED")
                 .status("SCHEDULED")
                 .delayMinutes(0)
                 .build();
 
-        when(aviationApiClient.fetchLiveFlight(flightIata)).thenReturn(externalDto);
-        when(flightRepository.findByFlightIata(flightIata)).thenReturn(Optional.empty());
-        when(flightRepository.save(any(Flight.class))).thenReturn(savedFlight);
+        when(flightRepository.findByFlightIataAndFlightDate(
+                flightIata, FLIGHT_DATE
+        )).thenReturn(Optional.empty());
 
-        // Act
-        FlightResponseDto response = flightService.syncAndGetFlight(flightIata);
+        when(aviationApiClient.fetchLiveFlight(flightIata, FLIGHT_DATE))
+                .thenReturn(externalDto);
 
-        // Assert
-        assertThat(response).isNotNull();
+        when(flightRepository.save(any(Flight.class)))
+                .thenReturn(savedFlight);
+
+        FlightResponseDto response =
+                flightService.syncAndGetFlight(flightIata, FLIGHT_DATE);
+
         assertThat(response.getFlightIata()).isEqualTo(flightIata);
         assertThat(response.getStatus()).isEqualTo("SCHEDULED");
         assertThat(response.isDegraded()).isFalse();
 
-        verify(flightRepository, times(1)).save(any(Flight.class));
+        ArgumentCaptor<Flight> flightCaptor =
+                ArgumentCaptor.forClass(Flight.class);
 
-        // Проверяем фиксацию первого лога в таблице аудита
-        ArgumentCaptor<FlightStatusLog> logCaptor = ArgumentCaptor.forClass(FlightStatusLog.class);
-        verify(logRepository, times(1)).save(logCaptor.capture());
+        verify(flightRepository).save(flightCaptor.capture());
 
-        FlightStatusLog capturedLog = logCaptor.getValue();
-        assertThat(capturedLog.getPreviousStatus()).isNull();
-        assertThat(capturedLog.getNewStatus()).isEqualTo("SCHEDULED");
-        assertThat(capturedLog.getDelayMinutes()).isEqualTo(0);
+        assertThat(flightCaptor.getValue().getFlightDate())
+                .isEqualTo(FLIGHT_DATE);
+
+        ArgumentCaptor<FlightStatusLog> logCaptor =
+                ArgumentCaptor.forClass(FlightStatusLog.class);
+
+        verify(logRepository).save(logCaptor.capture());
+
+        FlightStatusLog initialLog = logCaptor.getValue();
+
+        assertThat(initialLog.getPreviousStatus()).isNull();
+        assertThat(initialLog.getNewStatus()).isEqualTo("SCHEDULED");
+        assertThat(initialLog.getDelayMinutes()).isEqualTo(0);
     }
 
     @Test
-    @DisplayName("Обновление рейса: изменение статуса и задержки фиксируется в flight_status_logs")
+    @DisplayName("Изменение статуса и задержки записывается в историю")
     void syncAndGetFlight_WhenStatusAndDelayChanged_ShouldCreateAuditLog() {
-        // Arrange
-        String flightIata = "SU-100";
+        String flightIata = "SU100";
+
         Flight existingFlight = Flight.builder()
                 .id(1L)
                 .flightIata(flightIata)
+                .flightDate(FLIGHT_DATE)
                 .departureIata("SVO")
                 .arrivalIata("LED")
                 .status("SCHEDULED")
@@ -170,30 +288,38 @@ class FlightServiceTest {
                 .isFallbackData(false)
                 .build();
 
-        when(aviationApiClient.fetchLiveFlight(flightIata)).thenReturn(externalDto);
-        when(flightRepository.findByFlightIata(flightIata)).thenReturn(Optional.of(existingFlight));
-        when(flightRepository.save(any(Flight.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(flightRepository.findByFlightIataAndFlightDate(
+                flightIata, FLIGHT_DATE
+        )).thenReturn(Optional.of(existingFlight));
 
-        // Act
-        FlightResponseDto response = flightService.syncAndGetFlight(flightIata);
+        when(aviationApiClient.fetchLiveFlight(flightIata, FLIGHT_DATE))
+                .thenReturn(externalDto);
 
-        // Assert
+        when(flightRepository.save(any(Flight.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        FlightResponseDto response =
+                flightService.syncAndGetFlight(flightIata, FLIGHT_DATE);
+
         assertThat(response.getStatus()).isEqualTo("DELAYED");
         assertThat(response.getDelayMinutes()).isEqualTo(45);
 
-        ArgumentCaptor<FlightStatusLog> logCaptor = ArgumentCaptor.forClass(FlightStatusLog.class);
-        verify(logRepository, times(1)).save(logCaptor.capture());
+        ArgumentCaptor<FlightStatusLog> captor =
+                ArgumentCaptor.forClass(FlightStatusLog.class);
 
-        FlightStatusLog log = logCaptor.getValue();
-        assertThat(log.getPreviousStatus()).isEqualTo("SCHEDULED");
-        assertThat(log.getNewStatus()).isEqualTo("DELAYED");
-        assertThat(log.getDelayMinutes()).isEqualTo(45);
+        verify(logRepository).save(captor.capture());
+
+        FlightStatusLog statusLog = captor.getValue();
+
+        assertThat(statusLog.getPreviousStatus()).isEqualTo("SCHEDULED");
+        assertThat(statusLog.getNewStatus()).isEqualTo("DELAYED");
+        assertThat(statusLog.getDelayMinutes()).isEqualTo(45);
     }
 
     @Test
-    @DisplayName("При сбое без сохранённых данных возвращается 503")
+    @DisplayName("Fallback без сохранённых данных возвращает 503")
     void syncAndGetFlight_WhenFallbackActivated_ShouldReturn503WithoutSaving() {
-        String flightIata = "SU-500";
+        String flightIata = "SU500";
 
         ExternalFlightDto fallbackDto = ExternalFlightDto.builder()
                 .flightIata(flightIata)
@@ -202,33 +328,41 @@ class FlightServiceTest {
                 .isFallbackData(true)
                 .build();
 
-        when(flightRepository.findByFlightIata(flightIata))
-                .thenReturn(Optional.empty());
+        when(flightRepository.findByFlightIataAndFlightDate(
+                flightIata, FLIGHT_DATE
+        )).thenReturn(Optional.empty());
 
-        when(aviationApiClient.fetchLiveFlight(flightIata))
+        when(aviationApiClient.fetchLiveFlight(flightIata, FLIGHT_DATE))
                 .thenReturn(fallbackDto);
 
-        assertThatThrownBy(() -> flightService.syncAndGetFlight(flightIata))
-                .isInstanceOfSatisfying(
-                        ResponseStatusException.class,
-                        exception -> assertThat(exception.getStatusCode().value())
-                                .isEqualTo(503)
-                );
+        assertThatThrownBy(() ->
+                flightService.syncAndGetFlight(flightIata, FLIGHT_DATE)
+        ).isInstanceOfSatisfying(
+                ResponseStatusException.class,
+                exception -> assertThat(exception.getStatusCode().value())
+                        .isEqualTo(503)
+        );
 
         verify(flightRepository, never()).save(any(Flight.class));
         verifyNoInteractions(logRepository);
     }
 
     @Test
-    @DisplayName("При сбое API возвращаются сохранённые данные без изменения")
+    @DisplayName("При ошибке API сохранённые данные не изменяются")
     void apiFailure_ShouldReturnSavedFlightWithoutSaving() {
-        Instant departure = Instant.parse("2026-10-24T10:00:00Z");
-        Instant arrival = Instant.parse("2026-10-24T18:00:00Z");
-        Instant lastUpdated = Instant.parse("2026-10-24T09:50:00Z");
+        Instant departure =
+                Instant.parse("2026-10-25T10:00:00Z");
+
+        Instant arrival =
+                Instant.parse("2026-10-25T18:00:00Z");
+
+        Instant lastUpdated =
+                Instant.parse("2026-10-25T09:50:00Z");
 
         Flight savedFlight = Flight.builder()
                 .id(1L)
                 .flightIata("SU100")
+                .flightDate(FLIGHT_DATE)
                 .departureIata("SVO")
                 .arrivalIata("JFK")
                 .scheduledDepartureTime(departure)
@@ -238,13 +372,17 @@ class FlightServiceTest {
                 .updatedAt(lastUpdated)
                 .build();
 
-        when(flightRepository.findByFlightIata("SU100"))
-                .thenReturn(Optional.of(savedFlight));
+        when(flightRepository.findByFlightIataAndFlightDate(
+                "SU100", FLIGHT_DATE
+        )).thenReturn(Optional.of(savedFlight));
 
-        when(aviationApiClient.fetchLiveFlight("SU100"))
-                .thenThrow(new AviationApiUnavailableException("Test timeout"));
+        when(aviationApiClient.fetchLiveFlight("SU100", FLIGHT_DATE))
+                .thenThrow(
+                        new AviationApiUnavailableException("Test timeout")
+                );
 
-        FlightResponseDto response = flightService.syncAndGetFlight("SU100");
+        FlightResponseDto response =
+                flightService.syncAndGetFlight("SU100", FLIGHT_DATE);
 
         assertThat(response.isDegraded()).isTrue();
         assertThat(response.getStatus()).isEqualTo("DELAYED");
@@ -257,15 +395,22 @@ class FlightServiceTest {
         verifyNoInteractions(logRepository);
     }
 
-
     @Test
-    @DisplayName("Номер рейса очищается от пробелов и переводится в верхний регистр")
+    @DisplayName("Номер очищается от пробелов и переводится в верхний регистр")
     void syncAndGetFlight_ShouldNormalizeFlightNumber() {
         String userInput = "  su100  ";
         String expectedIata = "SU100";
 
         ExternalFlightDto externalDto = ExternalFlightDto.builder()
                 .flightIata(expectedIata)
+                .departureAirport("SVO")
+                .arrivalAirport("LED")
+                .scheduledDeparture(
+                        Instant.parse("2026-10-25T10:00:00Z")
+                )
+                .scheduledArrival(
+                        Instant.parse("2026-10-25T12:00:00Z")
+                )
                 .status("SCHEDULED")
                 .delayMinutes(0)
                 .isFallbackData(false)
@@ -274,32 +419,32 @@ class FlightServiceTest {
         Flight savedFlight = Flight.builder()
                 .id(1L)
                 .flightIata(expectedIata)
+                .flightDate(FLIGHT_DATE)
                 .status("SCHEDULED")
                 .delayMinutes(0)
                 .build();
 
-        when(flightRepository.findByFlightIata(expectedIata))
-                .thenReturn(Optional.empty());
+        when(flightRepository.findByFlightIataAndFlightDate(
+                expectedIata, FLIGHT_DATE
+        )).thenReturn(Optional.empty());
 
-        when(aviationApiClient.fetchLiveFlight(expectedIata))
+        when(aviationApiClient.fetchLiveFlight(expectedIata, FLIGHT_DATE))
                 .thenReturn(externalDto);
 
         when(flightRepository.save(any(Flight.class)))
                 .thenReturn(savedFlight);
 
         FlightResponseDto response =
-                flightService.syncAndGetFlight(userInput);
+                flightService.syncAndGetFlight(userInput, FLIGHT_DATE);
 
-        assertThat(response.getFlightIata())
-                .isEqualTo(expectedIata);
+        assertThat(response.getFlightIata()).isEqualTo(expectedIata);
 
         verify(flightRepository)
-                .findByFlightIata(expectedIata);
+                .findByFlightIataAndFlightDate(expectedIata, FLIGHT_DATE);
 
         verify(aviationApiClient)
-                .fetchLiveFlight(expectedIata);
+                .fetchLiveFlight(expectedIata, FLIGHT_DATE);
     }
-
 
     @Test
     @DisplayName("Завершённый рейс возвращается из БД без обращения к API")
@@ -309,35 +454,35 @@ class FlightServiceTest {
         Flight existingFlight = Flight.builder()
                 .id(10L)
                 .flightIata(flightIata)
+                .flightDate(FLIGHT_DATE)
                 .status("LANDED")
                 .delayMinutes(0)
                 .build();
 
-        when(flightRepository.findByFlightIata(flightIata))
-                .thenReturn(Optional.of(existingFlight));
+        when(flightRepository.findByFlightIataAndFlightDate(
+                flightIata, FLIGHT_DATE
+        )).thenReturn(Optional.of(existingFlight));
+
         FlightResponseDto response =
-                flightService.syncAndGetFlight(flightIata);
-        assertThat(response.getStatus())
-                .isEqualTo("LANDED");
+                flightService.syncAndGetFlight(flightIata, FLIGHT_DATE);
 
-        assertThat(response.isDegraded())
-                .isFalse();
+        assertThat(response.getStatus()).isEqualTo("LANDED");
+        assertThat(response.isDegraded()).isFalse();
+
         verifyNoInteractions(aviationApiClient);
-
-        verify(flightRepository, never())
-                .save(any(Flight.class));
+        verify(flightRepository, never()).save(any(Flight.class));
         verifyNoInteractions(logRepository);
     }
 
     @Test
-    @DisplayName("Fallback не перезаписывает сохранённый рейс")
+    @DisplayName("Старый fallback DTO не перезаписывает сохранённый рейс")
     void syncAndGetFlight_WhenApiFails_ShouldPreserveExistingData() {
         String flightIata = "SU100";
-
 
         Flight existingFlight = Flight.builder()
                 .id(1L)
                 .flightIata(flightIata)
+                .flightDate(FLIGHT_DATE)
                 .departureIata("SVO")
                 .arrivalIata("LED")
                 .scheduledDepartureTime(
@@ -357,34 +502,23 @@ class FlightServiceTest {
                 .isFallbackData(true)
                 .build();
 
-        when(flightRepository.findByFlightIata(flightIata))
-                .thenReturn(Optional.of(existingFlight));
+        when(flightRepository.findByFlightIataAndFlightDate(
+                flightIata, FLIGHT_DATE
+        )).thenReturn(Optional.of(existingFlight));
 
-        when(aviationApiClient.fetchLiveFlight(flightIata))
+        when(aviationApiClient.fetchLiveFlight(flightIata, FLIGHT_DATE))
                 .thenReturn(fallbackDto);
 
         FlightResponseDto response =
-                flightService.syncAndGetFlight(flightIata);
+                flightService.syncAndGetFlight(flightIata, FLIGHT_DATE);
 
-        assertThat(response.isDegraded())
-                .isTrue();
+        assertThat(response.isDegraded()).isTrue();
+        assertThat(response.getStatus()).isEqualTo("DELAYED");
+        assertThat(response.getDelayMinutes()).isEqualTo(45);
+        assertThat(existingFlight.getStatus()).isEqualTo("DELAYED");
+        assertThat(existingFlight.getDelayMinutes()).isEqualTo(45);
 
-        assertThat(response.getStatus())
-                .isEqualTo("DELAYED");
-
-        assertThat(response.getDelayMinutes())
-                .isEqualTo(45);
-
-        assertThat(existingFlight.getStatus())
-                .isEqualTo("DELAYED");
-
-        assertThat(existingFlight.getDelayMinutes())
-                .isEqualTo(45);
-
-        verify(flightRepository, never())
-                .save(any(Flight.class));
-
+        verify(flightRepository, never()).save(any(Flight.class));
         verifyNoInteractions(logRepository);
     }
-
 }

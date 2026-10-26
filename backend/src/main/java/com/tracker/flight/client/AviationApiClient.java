@@ -30,6 +30,7 @@ import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.Locale;
 
 // Клиент AviationStack API. Зона ответственности Боба: Б-1..Б-5 (ключ из env, дата, ошибки, время/статус, кэш-ключ).
 @Component
@@ -162,8 +163,8 @@ public class AviationApiClient {
             items = queryBothCodes(primaryParam, secondaryParam, cleanFlight, null);
         }
 
-        // Провайдер успешно ответил, и данных по рейсу нет — это единственный случай 404.
-        if (items.isEmpty()) {
+        // Пустой ответ подтверждает отсутствие рейса только если удалось проверить запрошенную дату.
+        if (items.isEmpty() && !dateFilterRejected) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Рейс " + cleanFlight + " не найден в реестре авиакомпаний");
         }
@@ -365,10 +366,19 @@ public class AviationApiClient {
             throw new AviationApiUnavailableException("AviationStack вернул рейс " + flightIata + " без данных об аэропортах");
         }
 
-        String depIata = dep.getIata() != null ? dep.getIata().toUpperCase() : "DEP";
-        String depAirport = dep.getAirport() != null ? dep.getAirport() : depIata;
+        String depIata = dep.getIata() == null
+                ? "" : dep.getIata().trim().toUpperCase(Locale.ROOT);
+        String arrIata = arr.getIata() == null
+                ? "" : arr.getIata().trim().toUpperCase(Locale.ROOT);
 
-        String arrIata = arr.getIata() != null ? arr.getIata().toUpperCase() : "ARR";
+        if (!depIata.matches("[A-Z]{3}") || !arrIata.matches("[A-Z]{3}")) {
+            throw new AviationApiUnavailableException(
+                    "AviationStack вернул рейс " + flightIata
+                            + " без корректных кодов аэропортов вылета/прилёта"
+            );
+        }
+
+        String depAirport = dep.getAirport() != null ? dep.getAirport() : depIata;
         String arrAirport = arr.getAirport() != null ? arr.getAirport() : arrIata;
 
         String depTz = dep.getTimezone();
