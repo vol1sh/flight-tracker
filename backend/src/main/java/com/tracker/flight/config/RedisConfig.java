@@ -22,11 +22,12 @@ import java.time.Duration;
 public class RedisConfig {
 
     public static final String FLIGHTS_CACHE = "flightsCache";
-    public static final Duration FLIGHTS_TTL = Duration.ofMinutes(3);
+
+    public static final Duration FLIGHTS_TTL =
+            Duration.ofMinutes(3);
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // Настройка ObjectMapper с поддержкой Instant и сохранением типов в JSON
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
