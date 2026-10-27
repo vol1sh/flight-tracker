@@ -6,12 +6,11 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-
-import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -55,15 +54,14 @@ class RequestLoggingFilterTest {
 
             assertThat(appender.list)
                     .anySatisfy(event -> {
-                        String message =
-                                event.getFormattedMessage();
+                        String message = event.getFormattedMessage();
 
                         assertThat(message)
-                                .contains("method=GET")
-                                .contains("path=/api/v1/flights/SU100")
+                                .contains("HTTP GET /api/v1/flights/SU100")
                                 .contains("status=200")
                                 .contains("durationMs=");
                     });
+
         } finally {
             logger.detachAppender(appender);
             appender.stop();
