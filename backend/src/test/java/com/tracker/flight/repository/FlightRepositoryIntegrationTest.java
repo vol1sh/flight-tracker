@@ -2,7 +2,6 @@ package com.tracker.flight.repository;
 
 import com.tracker.flight.AbstractIntegrationTest;
 import com.tracker.flight.entity.Flight;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +15,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.springframework.dao.DataIntegrityViolationException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Transactional
@@ -25,11 +26,6 @@ class FlightRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private FlightRepository flightRepository;
-
-    @BeforeEach
-    void setUp() {
-        flightRepository.deleteAll();
-    }
 
     @Test
     @DisplayName("База данных PostgreSQL успешно запущена и отвечает")
@@ -127,8 +123,14 @@ class FlightRepositoryIntegrationTest extends AbstractIntegrationTest {
                 .status("SCHEDULED")
                 .build();
 
-        flightRepository.save(flight1);
-        flightRepository.save(flight2);
+        flightRepository.saveAndFlush(flight1);
+        flightRepository.saveAndFlush(flight2);
+
+        assertThat(flight1.getId()).isNotNull();
+        assertThat(flight2.getId()).isNotNull();
+
+        assertThat(flight1.getId())
+                .isNotEqualTo(flight2.getId());
 
         List<Flight> flightsDate1 = flightRepository.findByFlightIataAndFlightDateOrderByScheduledDepartureTimeAsc("SU100", date1);
         assertThat(flightsDate1).hasSize(1);
@@ -137,5 +139,48 @@ class FlightRepositoryIntegrationTest extends AbstractIntegrationTest {
         List<Flight> flightsDate2 = flightRepository.findByFlightIataAndFlightDateOrderByScheduledDepartureTimeAsc("SU100", date2);
         assertThat(flightsDate2).hasSize(1);
         assertThat(flightsDate2.get(0).getFlightDate()).isEqualTo(date2);
+    }
+
+    @Test
+    @DisplayName("Одинаковый номер на одну дату нельзя сохранить дважды")
+    void shouldRejectDuplicateFlightOnSameDate() {
+
+        LocalDate flightDate = LocalDate.of(2026, 10, 25);
+
+        Flight firstFlight = Flight.builder()
+                .flightIata("SU100")
+                .flightDate(flightDate)
+                .departureIata("SVO")
+                .arrivalIata("LED")
+                .scheduledDepartureTime(
+                        Instant.parse("2026-10-25T10:00:00Z")
+                )
+                .scheduledArrivalTime(
+                        Instant.parse("2026-10-25T11:30:00Z")
+                )
+                .status("SCHEDULED")
+                .delayMinutes(0)
+                .build();
+
+        Flight duplicateFlight = Flight.builder()
+                .flightIata("SU100")
+                .flightDate(flightDate)
+                .departureIata("SVO")
+                .arrivalIata("LED")
+                .scheduledDepartureTime(
+                        Instant.parse("2026-10-25T12:00:00Z")
+                )
+                .scheduledArrivalTime(
+                        Instant.parse("2026-10-25T13:30:00Z")
+                )
+                .status("DELAYED")
+                .delayMinutes(15)
+                .build();
+
+        flightRepository.saveAndFlush(firstFlight);
+
+        assertThatThrownBy(
+                () -> flightRepository.saveAndFlush(duplicateFlight)
+        ).isInstanceOf(DataIntegrityViolationException.class);
     }
 }
