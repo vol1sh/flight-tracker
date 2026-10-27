@@ -358,16 +358,23 @@ public class AviationApiClient {
                 "Неожиданный сбой при обращении к AviationStack: " + redact(t.getMessage()), t);
     }
 
-    private ExternalFlightDto mapToExternalDto(String flightIata, AviationStackDto.FlightItem item) {
+    private ExternalFlightDto mapToExternalDto(
+            String flightIata,
+            AviationStackDto.FlightItem item
+    ) {
         AviationStackDto.AirportInfo dep = item.getDeparture();
         AviationStackDto.AirportInfo arr = item.getArrival();
 
         if (dep == null || arr == null) {
-            throw new AviationApiUnavailableException("AviationStack вернул рейс " + flightIata + " без данных об аэропортах");
+            throw new AviationApiUnavailableException(
+                    "AviationStack вернул рейс " + flightIata
+                            + " без данных об аэропортах"
+            );
         }
 
         String depIata = dep.getIata() == null
                 ? "" : dep.getIata().trim().toUpperCase(Locale.ROOT);
+
         String arrIata = arr.getIata() == null
                 ? "" : arr.getIata().trim().toUpperCase(Locale.ROOT);
 
@@ -378,67 +385,97 @@ public class AviationApiClient {
             );
         }
 
-        String depAirport = dep.getAirport() != null ? dep.getAirport() : depIata;
-        String arrAirport = arr.getAirport() != null ? arr.getAirport() : arrIata;
+        String depAirport = dep.getAirport() == null
+                || dep.getAirport().isBlank()
+                ? null : dep.getAirport();
 
-        String depTz = dep.getTimezone();
-        String arrTz = arr.getTimezone();
+        String arrAirport = arr.getAirport() == null
+                || arr.getAirport().isBlank()
+                ? null : arr.getAirport();
 
-        Instant depSched = parseAirportTimeToUtc(dep.getScheduled(), depTz);
-        Instant depActual = parseAirportTimeToUtc(dep.getActual() != null ? dep.getActual() : dep.getEstimated(), depTz);
-        Instant arrSched = parseAirportTimeToUtc(arr.getScheduled(), arrTz);
-        Instant arrActual = parseAirportTimeToUtc(arr.getActual() != null ? arr.getActual() : arr.getEstimated(), arrTz);
+        Instant depSched = parseAirportTimeToUtc(
+                dep.getScheduled(), dep.getTimezone()
+        );
 
-        // Не подставляем выдуманное "сейчас": без расписания данные непригодны.
+        Instant arrSched = parseAirportTimeToUtc(
+                arr.getScheduled(), arr.getTimezone()
+        );
+
+        Instant depActual = parseAirportTimeToUtc(
+                dep.getActual(), dep.getTimezone()
+        );
+
+        Instant arrActual = parseAirportTimeToUtc(
+                arr.getActual(), arr.getTimezone()
+        );
+
         if (depSched == null || arrSched == null) {
-            throw new AviationApiUnavailableException("AviationStack вернул рейс " + flightIata
-                    + " без распознаваемого расписания вылета/прилёта");
+            throw new AviationApiUnavailableException(
+                    "AviationStack вернул рейс " + flightIata
+                            + " без распознаваемого расписания вылета/прилёта"
+            );
         }
 
-        int delay = 0;
+        Integer delay = null;
+
         if (dep.getDelay() != null && dep.getDelay() > 0) {
             delay = dep.getDelay();
         } else if (arr.getDelay() != null && arr.getDelay() > 0) {
             delay = arr.getDelay();
+        } else if (Integer.valueOf(0).equals(dep.getDelay())
+                || Integer.valueOf(0).equals(arr.getDelay())) {
+            delay = 0;
         }
-
-        String status = resolveStatus(item.getFlightStatus(), delay, depActual);
 
         return ExternalFlightDto.builder()
                 .flightIata(flightIata)
                 .departureAirport(depIata)
-                .departureCity(depAirport)
+                .departureCity(null)
                 .departureAirportName(depAirport)
                 .arrivalAirport(arrIata)
-                .arrivalCity(arrAirport)
+                .arrivalCity(null)
                 .arrivalAirportName(arrAirport)
                 .scheduledDeparture(depSched)
-                .actualDeparture(depActual != null ? depActual : depSched)
+                .actualDeparture(depActual)
                 .scheduledArrival(arrSched)
                 .actualArrival(arrActual)
-                .status(status)
+                .status(resolveStatus(item.getFlightStatus(), delay))
                 .delayMinutes(delay)
                 .fallbackData(false)
                 .fetchedAt(Instant.now())
                 .build();
     }
 
-    // Б-4: CANCELLED/LANDED проверяются раньше ACTIVE, чтобы отменённый рейс не читался как "в полёте".
-    private static String resolveStatus(String rawFlightStatus, int delayMinutes, Instant actualDeparture) {
-        String raw = rawFlightStatus != null ? rawFlightStatus.toLowerCase() : "";
+    private static String resolveStatus(
+            String rawFlightStatus,
+            Integer delayMinutes
+    ) {
+        if (rawFlightStatus == null || rawFlightStatus.isBlank()) {
+            return null;
+        }
+
+        String raw = rawFlightStatus.trim().toLowerCase(Locale.ROOT);
 
         if (raw.contains("cancel")) {
             return "CANCELLED";
         }
+
         if (raw.contains("land") || raw.contains("arriv")) {
             return "LANDED";
         }
-        if (raw.contains("active") || raw.contains("air") || actualDeparture != null) {
+
+        if (raw.contains("active") || raw.contains("air")) {
+            if (delayMinutes == null) {
+                return "ACTIVE";
+            }
+
             return delayMinutes > 0 ? "DELAYED" : "ON_TIME";
         }
-        if (raw.contains("scheduled") || raw.isBlank()) {
+
+        if (raw.contains("scheduled")) {
             return "SCHEDULED";
         }
+
         return "UNKNOWN";
     }
 

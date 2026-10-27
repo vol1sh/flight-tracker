@@ -22,6 +22,7 @@ import java.time.Duration;
 public class RedisConfig {
 
     public static final String FLIGHTS_CACHE = "flightsCache";
+    public static final Duration FLIGHTS_TTL = Duration.ofMinutes(3);
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
@@ -38,7 +39,7 @@ public class RedisConfig {
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
 
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(3))
+                .entryTtl(FLIGHTS_TTL)
                 .disableCachingNullValues()
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer())
