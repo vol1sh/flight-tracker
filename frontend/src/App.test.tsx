@@ -1,11 +1,79 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import {render,screen,waitFor,cleanup,act,} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import App from './App';
 
 describe('Flight Tracker Frontend', () => {
+
+it('Блокирует кнопку на время поиска', async () => {
+  let resolveFlight!: (value: Response) => void;
+
+  const pendingFlight = new Promise<Response>((resolve) => {
+    resolveFlight = resolve;
+  });
+
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const url = String(input);
+
+    if (url.includes('/system/ping')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'UP' }),
+      } as Response);
+    }
+
+    if (url.includes('/flights/active') || url.includes('/history')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => [],
+      } as Response);
+    }
+
+    return pendingFlight;
+  });
+
+  render(<App />);
+
+  const user = userEvent.setup();
+
+  await user.type(
+    screen.getByLabelText(/номер рейса/i),
+    'SU100',
+  );
+
+  await user.type(
+    screen.getByLabelText(/дата рейса/i),
+    '2026-10-14',
+  );
+
+  await user.click(
+    screen.getByRole('button', { name: /найти рейс/i }),
+  );
+
+  expect(
+    screen.getByRole('button', { name: /поиск/i }),
+  ).toBeDisabled();
+
+  await act(async () => {
+    resolveFlight({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    } as Response);
+  });
+
+  expect(
+    await screen.findByText(/рейс на указанную дату не найден/i),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.getByRole('button', { name: /найти рейс/i }),
+  ).toBeEnabled();
+});
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -212,4 +280,81 @@ describe('Flight Tracker Frontend', () => {
     expect(screen.getAllByText('Запланирован').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Задержан').length).toBeGreaterThan(0);
   });
+
+it('Показывает карточку, даже если история недоступна', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = String(input);
+
+    if (url.includes('/system/ping')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'UP' }),
+      } as Response;
+    }
+
+    if (url.includes('/flights/active')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [],
+      } as Response;
+    }
+
+    if (url.includes('/history')) {
+      throw new Error('History service unavailable');
+    }
+
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        flightIata: 'SU100',
+        flightDate: '2026-10-14',
+        status: 'SCHEDULED',
+        delayMinutes: 0,
+        departureAirport: 'SVO',
+        arrivalAirport: 'JFK',
+        scheduledDeparture: '2026-10-14T10:00:00Z',
+        actualDeparture: null,
+        scheduledArrival: '2026-10-14T19:00:00Z',
+        actualArrival: null,
+        lastUpdated: '2026-10-14T09:50:00Z',
+        lastSyncedAt: '2026-10-14T09:50:00Z',
+        dataFresh: true,
+        isDegraded: false,
+      }),
+    } as Response;
+  });
+
+  render(<App />);
+
+  const user = userEvent.setup();
+
+  await user.type(
+    screen.getByLabelText(/номер рейса/i),
+    'SU100',
+  );
+
+  await user.type(
+    screen.getByLabelText(/дата рейса/i),
+    '2026-10-14',
+  );
+
+  await user.click(
+    screen.getByRole('button', { name: /найти рейс/i }),
+  );
+
+  expect(
+    await screen.findByText(/Дата рейса: 2026-10-14/i),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.getByText(/Данные актуальны/i),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.queryByRole('alert'),
+  ).not.toBeInTheDocument();
+});
 });

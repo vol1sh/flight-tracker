@@ -67,7 +67,6 @@ function formatDelay(minutes?: number | null): string {
   return `+${minutes} ${unit}`;
 }
 
-/** Детализированный силуэт лайнера (вид сверху, нос ↑) */
 function AirlinerSilhouette({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 100" fill="none" className={className} style={{ overflow: 'visible' as const }}>
@@ -449,11 +448,13 @@ export default function App() {
     const params = new URLSearchParams({ date });
 
     try {
-      const [fRes, hRes] = await Promise.all([
-        fetch(`/api/v1/flights/${encodeURIComponent(code)}?${params}`),
-        fetch(`/api/v1/flights/${encodeURIComponent(code)}/history?${params}`),
-      ]);
+      const [flightResult, historyResult] = await Promise.allSettled([
+  fetch(`/api/v1/flights/${encodeURIComponent(code)}?${params}`),
+  fetch(`/api/v1/flights/${encodeURIComponent(code)}/history?${params}`), ]);
 
+if (flightResult.status === 'rejected') {throw flightResult.reason;}
+const fRes = flightResult.value;
+const hRes = historyResult.status === 'fulfilled' ? historyResult.value : null;
       if (!fRes.ok) {
         setFlightData(null);
         setHistoryLogs([]);
@@ -473,10 +474,17 @@ export default function App() {
 
       const fData: FlightResponse = await fRes.json();
       let hData: FlightStatusLog[] = [];
-      if (hRes.ok) {
-        const parsedHistory = await hRes.json();
-        hData = Array.isArray(parsedHistory) ? parsedHistory : [];
-      }
+      if (hRes?.ok) {
+          try {
+              const parsedHistory: unknown = await hRes.json();
+
+    hData = Array.isArray(parsedHistory)
+      ? (parsedHistory as FlightStatusLog[])
+      : [];
+  } catch (error) {
+    console.warn('Не удалось прочитать историю рейса', error);
+  }
+}
       setFlightData(fData);
       setHistoryLogs(hData);
     } catch {
