@@ -103,10 +103,18 @@ public class FlightService {
                     cleanFlight,
                     flightDate
             );
+
         } catch (AviationApiUnavailableException
                  | AviationAccessException
                  | AviationRateLimitException
                  | CallNotPermittedException exception) {
+
+            log.warn(
+                    "AviationStack lookup failed: flight={}, date={}, failureType={}",
+                    cleanFlight,
+                    flightDate,
+                    exception.getClass().getSimpleName()
+            );
             return returnSavedFlightOr503(cleanFlight, existingFlightOpt);
         }
 

@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.Locale;
 
-// Клиент AviationStack API. Зона ответственности Боба: Б-1..Б-5 (ключ из env, дата, ошибки, время/статус, кэш-ключ).
 @Component
 public class AviationApiClient {
 
@@ -49,7 +48,6 @@ public class AviationApiClient {
         this.restClient = builder.baseUrl(baseUrl).build();
         this.apiKey = apiKey != null ? apiKey.trim() : "";
         if (baseUrl != null && baseUrl.trim().toLowerCase().startsWith("http://")) {
-            // Ключ уходит в query-параметре — по HTTP он передаётся открытым текстом.
             log.warn("AviationStack base-url использует HTTP без шифрования ({}); используйте https://", baseUrl);
         }
     }
@@ -78,9 +76,26 @@ public class AviationApiClient {
                     .retrieve()
                     .body(AviationStackDto.class);
 
-            if (response == null || response.getData() == null || response.getData().isEmpty()) {
+
+            if (response == null) {
+                log.warn("AviationStack active: пустое тело ответа");
                 return Collections.emptyList();
             }
+
+            if (response.getError() != null) {
+                log.warn("AviationStack active: providerErrorCode={}", response.getError().getCode());
+                return Collections.emptyList();
+            }
+
+            if (response.getData() == null) {log.warn("AviationStack active: поле data отсутствует");
+                return Collections.emptyList();
+            }
+
+            if (response.getData().isEmpty()) {log.info("AviationStack active: поставщик вернул пустой список");
+                return Collections.emptyList();
+            }
+
+            log.info("AviationStack active: получено записей={}", response.getData().size());
 
             return response.getData().stream()
                     .filter(item -> item != null && item.getFlight() != null &&
@@ -106,7 +121,6 @@ public class AviationApiClient {
         }
     }
 
-    // Без даты — используется FlightService.
     @Cacheable(
             value = RedisConfig.FLIGHTS_CACHE,
             key = "T(com.tracker.flight.client.AviationApiClient).normalizeFlightCode(#flightIata)",
