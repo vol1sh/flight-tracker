@@ -337,3 +337,107 @@ TTL: 3 минуты
 5.  Вернуть пользователю.
 
 ---
+
+## Этап 4. Кодирование, отладка и автоматизация (CI/CD)
+### 4.1. Цель этапа и соответствие методическим требованиям
+| Требование этапа 4 | Реализация / подтверждение | Статус на момент подготовки раздела |
+|---|---|---|
+| Значимый кодовый вклад **каждого** участника | Ветки, коммиты, Pull Requests, связанные с Issues; персональные ссылки приведены в §4.4 | **Необходимо дополнить** доказательствами всех участников |
+| Логирование в STDOUT для проверки работы и времени ответа | `backend/src/main/java/com/tracker/flight/logging/RequestLoggingFilter.java`; бизнес-логи `FlightService` | **Реализовано в коде**; фактический лог прогона приложить |
+| Автоматическая сборка и запуск тестов на push/merge | `.github/workflows/ci.yml`, backend `mvn -B clean verify`, frontend `npm ci`, `npm test`, `npm run build` | **Настроено**; [пример успешного CI на `ab55535`](https://github.com/vol1sh/flight-tracker/actions/runs/40599416392) |
+| Публичный репозиторий и управляемая разработка | [Репозиторий](https://github.com/vol1sh/flight-tracker), [Issues](https://github.com/vol1sh/flight-tracker/issues), [Pull Requests](https://github.com/vol1sh/flight-tracker/pulls), GitHub Projects | **Репозиторий и задачи существуют**; процесс каждого участника подтвердить ссылками |
+
+### 4.2. Реализованная система и границы MVP
+**Реализованные функции:**
+1. Поиск по номеру рейса и обязательной дате в формате `YYYY-MM-DD`; нормализация номера.
+2. Получение статуса, аэропортов, временных характеристик, величины задержки и служебных признаков свежести данных, если они доступны.
+3. Раздельное хранение одинакового номера рейса для разных дат; получение истории конкретного выполнения рейса.
+4. Использование сохранённых данных PostgreSQL при предусмотренных сценариях недоступности внешнего API, без подмены данными другой даты.
+5. Кэширование через Redis с TTL **3 минуты**; обработка ошибок поставщика и механизмы отказоустойчивости.
+6. Отображение в интерфейсе состояний загрузки, успешного ответа, отсутствия данных, недоступности сервиса и устаревшей информации.
+
+**Связь с User Stories этапа 2:**
+| User Story | Реализация в MVP |
+|---|---|
+| **US-1 — пассажир** | Основной сценарий поиска рейса по номеру и дате, статус, задержка, сведения об обновлении |
+| **US-2 — встречающий** | Можно вручную отслеживать статус и прогнозируемое прибытие через интерфейс |
+| **US-3 — аналитик** | Доступна история статусов конкретного рейса по дате |
+
+### 4.3. Реализованные модули и их взаимосвязь
+| Путь в репозитории | Назначение |
+|---|---|
+| `frontend/src/App.tsx` | Пользовательский интерфейс и HTTP-запросы к backend |
+| `backend/src/main/java/com/tracker/flight/controller/FlightController.java` | Маршруты REST API для рейсов и истории |
+| `backend/src/main/java/com/tracker/flight/service/FlightService.java` | Бизнес-логика, проверка даты, выбор PostgreSQL / AviationStack / fallback |
+| `backend/src/main/java/com/tracker/flight/client/AviationApiClient.java` | Работа с внешним API и классификация ошибок |
+| `backend/src/main/java/com/tracker/flight/config/RedisConfig.java` | Настройка кэша Redis, TTL 180 секунд |
+| `backend/src/main/java/com/tracker/flight/logging/RequestLoggingFilter.java` | STDOUT-логирование HTTP-запросов и длительности |
+| `backend/src/main/resources/db/migration/` | Версионируемые миграции Flyway |
+| `.github/workflows/ci.yml` | Автоматическая сборка и тестирование |
+| `docker-compose.yml` | Локальная оркестрация сервисов |
+
+Реализованные HTTP-контракты:
+```http
+GET /api/v1/flights/active
+GET /api/v1/flights/{flightIata}?date=YYYY-MM-DD
+GET /api/v1/flights/{flightIata}/history?date=YYYY-MM-DD
+GET /actuator/health
+```
+При выполнении поиска фронтенд обращается к backend; backend проверяет номер и дату, находит запись в PostgreSQL и при необходимости запрашивает AviationStack. Ответы поставщика могут кэшироваться в Redis, а обновлённые сведения — сохраняться в PostgreSQL. При невозможности получить данные приложение использует допустимый резервный сценарий или возвращает ошибку, не подставляя рейс за другую дату.
+
+### 4.5. Качество кода и STDOUT-логирование
+Для наблюдения за работой сервиса в `RequestLoggingFilter` используется фильтр `OncePerRequestFilter`, измеряющий время обработки через `System.nanoTime()` и логирующий:
+- HTTP-метод и путь запроса;
+- фактический HTTP-статус ответа;
+- длительность обработки в миллисекундах (`durationMs`).
+
+В `FlightService` также логируются нормализованный номер и дата поиска, источник (`source=DB`, `source=NONE` и другие сценарии), а также ситуации отказа внешнего поставщика. Логи выводятся в стандартный поток контейнера и доступны через Docker Compose.
+
+**Запуск и просмотр STDOUT из корня репозитория:**
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f --tail=100 backend
+```
+
+```bash
+curl -i http://localhost:8080/actuator/health
+curl -i 'http://localhost:8080/api/v1/flights/SU100?date=2026-10-27'
+```
+
+### 4.6. GitHub Actions
+Конфигурация CI размещена в [`.github/workflows/ci.yml`](https://github.com/vol1sh/flight-tracker/blob/main/.github/workflows/ci.yml). Workflow запускается при `push`, а также при `pull_request` в ветку `main`.
+
+| Job | Окружение | Действия |
+|---|---|---|
+| `backend-build-and-test` | Ubuntu, Eclipse Temurin Java 21, PostgreSQL 16, Redis 7 | Checkout, настройка JDK, `mvn -B clean verify` из `backend/` |
+| `frontend-build` | Ubuntu, Node.js 22 | Checkout, `npm ci`, `npm test`, `npm run build` из `frontend/` |
+
+Запуск Maven включает компиляцию и выполнение настроенных тестов. В проекте используются JUnit/Mockito, MockMvc, проверки клиента AviationStack через заглушки, а интеграционные проверки PostgreSQL работают через Testcontainers. Frontend-тесты выполняются с Vitest.
+
+### 4.7. Отладка и проверка работоспособности MVP
+Для приёмки MVP используется матрица QA: `docs/qa/MVP_TEST_MATRIX.md`. Проверки подразделяются на автоматизированные (JUnit, MockMvc, Testcontainers, Vitest), HTTP/контейнерные и ручные (браузер, PostgreSQL, GitHub).
+
+| Проверка | Инструмент | Что должно быть подтверждено |
+|---|---|---|
+| Сборка и работа сервисов | Docker Compose + `/actuator/health` | PostgreSQL, Redis, backend, frontend доступны |
+| Поиск сохранённого рейса | Браузер + DevTools Network + SQL | Номер, дата и поля совпадают в JSON, UI и БД |
+| Обязательная дата и ошибочный номер | `curl`, `FlightControllerContractTest` | Корректные HTTP 400 |
+| Изоляция разных дат | `FlightServiceTest`, `FlightRepositoryIntegrationTest` | Номер за разные даты не смешивается |
+| Отказ внешнего API и fallback | `FlightServiceTest` | Не подставляются данные другой даты; корректная деградация |
+| История и реакции интерфейса | `App.test.tsx`, браузер | Карточка, история, ошибки, предупреждение об устаревших данных |
+| Реальное обращение к AviationStack | Backend + безопасный лог поставщика | Подтверждён успешный ответ без утечки ключа |
+| STDOUT | Docker Compose logs | Путь, статус, `durationMs`, источник |
+| CI | GitHub Actions | Backend и frontend jobs зелёные на проверенном SHA |
+
+**Команды для повторяемой проверки:**
+```bash
+cp .env.example .env
+docker compose up -d --build
+docker compose ps
+curl -i http://localhost:8080/actuator/health
+curl -i http://localhost:3000/
+docker compose logs --tail=100 backend
+```
+
+Для автоматических backend-тестов локально нужен Maven/Java 21 либо Maven-контейнер с доступом к Docker Engine для Testcontainers; для frontend — Node.js/npm либо соответствующая проверка CI. Самый воспроизводимый способ показать выполнение в отчёте — ссылка на конкретный workflow GitHub Actions.
