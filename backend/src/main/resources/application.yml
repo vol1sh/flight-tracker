@@ -32,10 +32,15 @@ app:
   aviation-api:
     base-url: ${AVIATION_API_BASE_URL:https://api.aviationstack.com/v1}
     key: ${AVIATION_API_KEY:}
+    connect-timeout-ms: ${AVIATION_API_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${AVIATION_API_READ_TIMEOUT_MS:10000}
   scheduler:
     flight-poller:
       enabled: ${SCHEDULER_POLLER_ENABLED:false}
       fixed-delay-ms: ${SCHEDULER_POLLER_DELAY_MS:86400000}
+      # Не больше N рейсов за цикл и только даты [сегодня-1; сегодня+1] (UTC) — защита квоты AviationStack.
+      max-flights-per-cycle: ${SCHEDULER_POLLER_MAX_FLIGHTS:5}
+      date-window-days: ${SCHEDULER_POLLER_DATE_WINDOW_DAYS:1}
 
 # 404 (рейс подтверждённо не найден) и ошибки доступа — не сбои провайдера, не должны размыкать цепь.
 resilience4j:

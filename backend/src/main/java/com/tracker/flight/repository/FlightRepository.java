@@ -25,6 +25,13 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
 
     List<Flight> findByStatusNotIn(List<String> statuses);
 
+    // Фоновый опрос (US-2): только незавершённые рейсы в окне дат, чтобы не опрашивать старые рейсы вечно.
+    List<Flight> findByStatusNotInAndFlightDateBetween(
+            List<String> statuses,
+            LocalDate from,
+            LocalDate to
+    );
+
     @Query(value = """
         SELECT 
             COUNT(*) as sampleSize,

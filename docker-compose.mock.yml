@@ -1,0 +1,26 @@
+# Тестовый AviationStack (WireMock) для QA и демонстрации — без ключа, VPN и расхода квоты.
+# Запуск:   docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
+# Сценарии: mock/README.md. Обычный запуск без этого файла по-прежнему ходит в настоящий AviationStack.
+services:
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    container_name: flight_tracker_wiremock
+    command: ["--disable-banner"]
+    ports:
+      - "127.0.0.1:8089:8080"
+    volumes:
+      - ./mock/aviationstack:/home/wiremock
+    networks:
+      - flight_network
+
+  backend:
+    depends_on:
+      wiremock:
+        condition: service_started
+    environment:
+      AVIATION_API_BASE_URL: http://wiremock:8080/v1
+      AVIATION_API_KEY: mock-key
+      # С тестовым API фоновый опрос можно включать часто; с настоящим — нельзя (квота тарифа).
+      SCHEDULER_POLLER_ENABLED: ${MOCK_POLLER_ENABLED:-true}
+      SCHEDULER_POLLER_DELAY_MS: ${MOCK_POLLER_DELAY_MS:-30000}
+      SCHEDULER_POLLER_MAX_FLIGHTS: ${MOCK_POLLER_MAX_FLIGHTS:-50}

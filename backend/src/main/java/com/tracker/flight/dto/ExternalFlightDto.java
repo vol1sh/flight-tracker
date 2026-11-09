@@ -27,6 +27,12 @@ public class ExternalFlightDto {
     // Момент, когда данные реально получены от AviationStack (не время чтения из Redis-кэша).
     private Instant fetchedAt;
 
+    // US-2/US-3: раздельные задержки и прогноз прибытия. null = поставщик не сообщил (не ноль).
+    private Integer departureDelayMinutes;
+    private Integer arrivalDelayMinutes;
+    private Instant estimatedDeparture;
+    private Instant estimatedArrival;
+
     public ExternalFlightDto() {
     }
 
@@ -112,6 +118,18 @@ public class ExternalFlightDto {
     public Instant getFetchedAt() { return fetchedAt; }
     public void setFetchedAt(Instant fetchedAt) { this.fetchedAt = fetchedAt; }
 
+    public Integer getDepartureDelayMinutes() { return departureDelayMinutes; }
+    public void setDepartureDelayMinutes(Integer departureDelayMinutes) { this.departureDelayMinutes = departureDelayMinutes; }
+
+    public Integer getArrivalDelayMinutes() { return arrivalDelayMinutes; }
+    public void setArrivalDelayMinutes(Integer arrivalDelayMinutes) { this.arrivalDelayMinutes = arrivalDelayMinutes; }
+
+    public Instant getEstimatedDeparture() { return estimatedDeparture; }
+    public void setEstimatedDeparture(Instant estimatedDeparture) { this.estimatedDeparture = estimatedDeparture; }
+
+    public Instant getEstimatedArrival() { return estimatedArrival; }
+    public void setEstimatedArrival(Instant estimatedArrival) { this.estimatedArrival = estimatedArrival; }
+
     public static class Builder {
         private String flightIata;
         private String departureAirport;
@@ -128,6 +146,10 @@ public class ExternalFlightDto {
         private Integer delayMinutes;
         private boolean fallbackData;
         private Instant fetchedAt;
+        private Integer departureDelayMinutes;
+        private Integer arrivalDelayMinutes;
+        private Instant estimatedDeparture;
+        private Instant estimatedArrival;
 
         public Builder flightIata(String flightIata) {
             this.flightIata = flightIata;
@@ -209,6 +231,26 @@ public class ExternalFlightDto {
             return this;
         }
 
+        public Builder departureDelayMinutes(Integer departureDelayMinutes) {
+            this.departureDelayMinutes = departureDelayMinutes;
+            return this;
+        }
+
+        public Builder arrivalDelayMinutes(Integer arrivalDelayMinutes) {
+            this.arrivalDelayMinutes = arrivalDelayMinutes;
+            return this;
+        }
+
+        public Builder estimatedDeparture(Instant estimatedDeparture) {
+            this.estimatedDeparture = estimatedDeparture;
+            return this;
+        }
+
+        public Builder estimatedArrival(Instant estimatedArrival) {
+            this.estimatedArrival = estimatedArrival;
+            return this;
+        }
+
         public ExternalFlightDto build() {
             ExternalFlightDto dto = new ExternalFlightDto(
                     flightIata,
@@ -227,6 +269,10 @@ public class ExternalFlightDto {
                     fallbackData
             );
             dto.setFetchedAt(fetchedAt);
+            dto.setDepartureDelayMinutes(departureDelayMinutes);
+            dto.setArrivalDelayMinutes(arrivalDelayMinutes);
+            dto.setEstimatedDeparture(estimatedDeparture);
+            dto.setEstimatedArrival(estimatedArrival);
             return dto;
         }
     }
