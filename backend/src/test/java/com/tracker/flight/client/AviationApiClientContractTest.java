@@ -503,4 +503,57 @@ class AviationApiClientContractTest {
 
         assertThat(cache().get("SU100:" + DATE)).isNull();
     }
+
+    // ---------- EXT-02: раздельные задержки и прогноз прибытия ----------
+
+    private static final String TWO_DELAYS_JSON = """
+            {"data":[{"flight_date":"2026-10-25","flight_status":"active",
+              "departure":{"airport":"Pulkovo","timezone":"Europe/Moscow","iata":"LED",
+                           "scheduled":"2026-10-25T10:00:00+00:00",
+                           "estimated":"2026-10-25T10:30:00+00:00",
+                           "actual":"2026-10-25T10:30:00+00:00","delay":30},
+              "arrival":{"airport":"Sheremetyevo","timezone":"Europe/Moscow","iata":"SVO",
+                         "scheduled":"2026-10-25T11:30:00+00:00",
+                         "estimated":"2026-10-25T11:40:00+00:00","delay":10},
+              "airline":{"name":"Aeroflot"},
+              "flight":{"iata":"SU100"}}]}""";
+
+    @Test
+    @DisplayName("EXT-02: задержка вылета и прилёта раздельно (+30 / +10), прогноз прибытия отдельно от факта")
+    void twoDelays_AreMappedSeparately() {
+        respondOk(TWO_DELAYS_JSON);
+
+        ExternalFlightDto dto = client.fetchLiveFlight("SU100", DATE);
+
+        assertThat(dto.getDepartureDelayMinutes()).isEqualTo(30);
+        assertThat(dto.getArrivalDelayMinutes()).isEqualTo(10);
+        assertThat(dto.getEstimatedDeparture()).isEqualTo(java.time.Instant.parse("2026-10-25T10:30:00Z"));
+        assertThat(dto.getEstimatedArrival()).isEqualTo(java.time.Instant.parse("2026-10-25T11:40:00Z"));
+        // Факта прилёта ещё нет — прогноз не выдаётся за факт.
+        assertThat(dto.getActualArrival()).isNull();
+    }
+
+    @Test
+    @DisplayName("EXT-02: неизвестные задержки и прогноз остаются null, а не 0 / плановое время")
+    void unknownDelays_StayNull() {
+        respondOk(FLIGHT_JSON.replace(",\"delay\":0", ""));
+
+        ExternalFlightDto dto = client.fetchLiveFlight("SU100", DATE);
+
+        assertThat(dto.getDepartureDelayMinutes()).isNull();
+        assertThat(dto.getArrivalDelayMinutes()).isNull();
+        assertThat(dto.getEstimatedArrival()).isNull();
+        assertThat(dto.getScheduledArrival()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("EXT-02: нулевая задержка вылета не подменяется задержкой прилёта")
+    void zeroDepartureDelay_IsNotReplacedByArrivalDelay() {
+        respondOk(TWO_DELAYS_JSON.replace("\"delay\":30", "\"delay\":0"));
+
+        ExternalFlightDto dto = client.fetchLiveFlight("SU100", DATE);
+
+        assertThat(dto.getDepartureDelayMinutes()).isZero();
+        assertThat(dto.getArrivalDelayMinutes()).isEqualTo(10);
+    }
 }

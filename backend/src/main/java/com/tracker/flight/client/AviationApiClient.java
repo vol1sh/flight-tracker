@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
@@ -43,7 +44,25 @@ public class AviationApiClient {
     public AviationApiClient(
             RestClient.Builder builder,
             @Value("${app.aviation-api.base-url:https://api.aviationstack.com/v1}") String baseUrl,
-            @Value("${app.aviation-api.key:}") String apiKey
+            @Value("${app.aviation-api.key:}") String apiKey,
+            @Value("${app.aviation-api.connect-timeout-ms:5000}") int connectTimeoutMs,
+            @Value("${app.aviation-api.read-timeout-ms:10000}") int readTimeoutMs
+    ) {
+        this(builder.requestFactory(timeoutRequestFactory(connectTimeoutMs, readTimeoutMs)), baseUrl, apiKey);
+    }
+
+    private static SimpleClientHttpRequestFactory timeoutRequestFactory(int connectTimeoutMs, int readTimeoutMs) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(connectTimeoutMs);
+        factory.setReadTimeout(readTimeoutMs);
+        return factory;
+    }
+
+    // Без своих таймаутов: используется в тестах, где фабрику запросов подменяет MockRestServiceServer.
+    public AviationApiClient(
+            RestClient.Builder builder,
+            String baseUrl,
+            String apiKey
     ) {
         this.restClient = builder.baseUrl(baseUrl).build();
         this.apiKey = apiKey != null ? apiKey.trim() : "";
@@ -432,6 +451,10 @@ public class AviationApiClient {
 
         Integer delay = null;
 
+        // US-2/US-3 (EXT-02): прогноз поставщика — отдельно от факта; нет прогноза = null, а не плановое время.
+        Instant depEstimated = parseAirportTimeToUtc(dep.getEstimated(), dep.getTimezone());
+        Instant arrEstimated = parseAirportTimeToUtc(arr.getEstimated(), arr.getTimezone());
+
         if (dep.getDelay() != null && dep.getDelay() > 0) {
             delay = dep.getDelay();
         } else if (arr.getDelay() != null && arr.getDelay() > 0) {
@@ -455,6 +478,11 @@ public class AviationApiClient {
                 .actualArrival(arrActual)
                 .status(resolveStatus(item.getFlightStatus(), delay))
                 .delayMinutes(delay)
+                // EXT-02: задержка вылета и прилёта раздельно, без подстановки одной вместо другой; null = неизвестно.
+                .departureDelayMinutes(dep.getDelay())
+                .arrivalDelayMinutes(arr.getDelay())
+                .estimatedDeparture(depEstimated)
+                .estimatedArrival(arrEstimated)
                 .fallbackData(false)
                 .fetchedAt(Instant.now())
                 .build();

@@ -1,0 +1,126 @@
+{
+  "mappings": [
+    {
+      "name": "ZZ2000 stateful: Started",
+      "priority": 1,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ2000"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{{#assign 'd'}}{{#if request.query.flight_date}}{{request.query.flight_date}}{{else}}{{now format='yyyy-MM-dd'}}{{/if}}{{/assign}}{\"pagination\": {\"limit\": 100, \"offset\": 0, \"count\": 1, \"total\": 1}, \"data\": [{\"flight_date\": \"{{d}}\", \"flight_status\": \"scheduled\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\"}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\"}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ2000\", \"number\": \"2000\"}}]}",
+        "transformers": [
+          "response-template"
+        ]
+      },
+      "scenarioName": "zz2000-lifecycle",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "DELAYED"
+    },
+    {
+      "name": "ZZ2000 stateful: DELAYED",
+      "priority": 1,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ2000"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{{#assign 'd'}}{{#if request.query.flight_date}}{{request.query.flight_date}}{{else}}{{now format='yyyy-MM-dd'}}{{/if}}{{/assign}}{\"pagination\": {\"limit\": 100, \"offset\": 0, \"count\": 1, \"total\": 1}, \"data\": [{\"flight_date\": \"{{d}}\", \"flight_status\": \"active\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\", \"estimated\": \"{{d}}T10:30:00+00:00\", \"actual\": \"{{d}}T10:30:00+00:00\", \"delay\": 30}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\", \"estimated\": \"{{d}}T11:40:00+00:00\", \"delay\": 10}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ2000\", \"number\": \"2000\"}}]}",
+        "transformers": [
+          "response-template"
+        ]
+      },
+      "scenarioName": "zz2000-lifecycle",
+      "requiredScenarioState": "DELAYED",
+      "newScenarioState": "LANDED"
+    },
+    {
+      "name": "ZZ2000 stateful: LANDED",
+      "priority": 1,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ2000"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{{#assign 'd'}}{{#if request.query.flight_date}}{{request.query.flight_date}}{{else}}{{now format='yyyy-MM-dd'}}{{/if}}{{/assign}}{\"pagination\": {\"limit\": 100, \"offset\": 0, \"count\": 1, \"total\": 1}, \"data\": [{\"flight_date\": \"{{d}}\", \"flight_status\": \"landed\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\", \"actual\": \"{{d}}T10:12:00+00:00\", \"delay\": 12}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\", \"actual\": \"{{d}}T11:35:00+00:00\", \"delay\": 5}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ2000\", \"number\": \"2000\"}}]}",
+        "transformers": [
+          "response-template"
+        ]
+      },
+      "scenarioName": "zz2000-lifecycle",
+      "requiredScenarioState": "LANDED",
+      "newScenarioState": "LANDED"
+    },
+    {
+      "name": "Active flights list",
+      "priority": 3,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "absent": true
+          },
+          "flight_icao": {
+            "absent": true
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{{#assign 'd'}}{{#if request.query.flight_date}}{{request.query.flight_date}}{{else}}{{now format='yyyy-MM-dd'}}{{/if}}{{/assign}}{\"pagination\": {\"limit\": 100, \"offset\": 0, \"count\": 4, \"total\": 4}, \"data\": [{\"flight_date\": \"{{d}}\", \"flight_status\": \"scheduled\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\"}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\"}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ1001\", \"number\": \"1001\"}}, {\"flight_date\": \"{{d}}\", \"flight_status\": \"active\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\", \"estimated\": \"{{d}}T10:30:00+00:00\", \"actual\": \"{{d}}T10:30:00+00:00\", \"delay\": 30}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\", \"estimated\": \"{{d}}T11:40:00+00:00\", \"delay\": 10}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ1002\", \"number\": \"1002\"}}, {\"flight_date\": \"{{d}}\", \"flight_status\": \"landed\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\", \"actual\": \"{{d}}T10:12:00+00:00\", \"delay\": 12}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\", \"actual\": \"{{d}}T11:35:00+00:00\", \"delay\": 5}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ1003\", \"number\": \"1003\"}}, {\"flight_date\": \"{{d}}\", \"flight_status\": \"cancelled\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\"}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\"}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ1004\", \"number\": \"1004\"}}]}",
+        "transformers": [
+          "response-template"
+        ]
+      }
+    },
+    {
+      "name": "Any other flight: empty data",
+      "priority": 10,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{{#assign 'd'}}{{#if request.query.flight_date}}{{request.query.flight_date}}{{else}}{{now format='yyyy-MM-dd'}}{{/if}}{{/assign}}{\"pagination\": {\"limit\": 100, \"offset\": 0, \"count\": 0, \"total\": 0}, \"data\": []}",
+        "transformers": [
+          "response-template"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "mappings": [
+    {
+      "name": "ZZ1006 slow answer (3 s), still within timeout",
+      "priority": 1,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ1006"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{{#assign 'd'}}{{#if request.query.flight_date}}{{request.query.flight_date}}{{else}}{{now format='yyyy-MM-dd'}}{{/if}}{{/assign}}{\"pagination\": {\"limit\": 100, \"offset\": 0, \"count\": 1, \"total\": 1}, \"data\": [{\"flight_date\": \"{{d}}\", \"flight_status\": \"scheduled\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\"}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\"}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ1006\", \"number\": \"1006\"}}]}",
+        "transformers": [
+          "response-template"
+        ],
+        "fixedDelayMilliseconds": 3000
+      }
+    },
+    {
+      "name": "ZZ1408 hangs 15 s > read timeout 10 s",
+      "priority": 1,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ1408"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{{#assign 'd'}}{{#if request.query.flight_date}}{{request.query.flight_date}}{{else}}{{now format='yyyy-MM-dd'}}{{/if}}{{/assign}}{\"pagination\": {\"limit\": 100, \"offset\": 0, \"count\": 1, \"total\": 1}, \"data\": [{\"flight_date\": \"{{d}}\", \"flight_status\": \"scheduled\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\"}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\"}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ1408\", \"number\": \"1408\"}}]}",
+        "transformers": [
+          "response-template"
+        ],
+        "fixedDelayMilliseconds": 15000
+      }
+    },
+    {
+      "name": "ZZ1500 HTTP 500",
+      "priority": 1,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ1500"
+          }
+        }
+      },
+      "response": {
+        "status": 500,
+        "body": "Internal Server Error"
+      }
+    },
+    {
+      "name": "ZZ1429 HTTP 429 quota",
+      "priority": 1,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ1429"
+          }
+        }
+      },
+      "response": {
+        "status": 429,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "error": {
+            "code": "rate_limit_reached",
+            "message": "Mock: rate limit reached"
+          }
+        }
+      }
+    },
+    {
+      "name": "ZZ1403 flight_date forbidden by plan",
+      "priority": 1,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ1403"
+          },
+          "flight_date": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "error": {
+            "code": "function_access_restricted",
+            "message": "Mock: flight_date is not available on this plan"
+          }
+        }
+      }
+    },
+    {
+      "name": "ZZ1403 without flight_date",
+      "priority": 2,
+      "request": {
+        "method": "GET",
+        "urlPath": "/v1/flights",
+        "queryParameters": {
+          "flight_iata": {
+            "equalTo": "ZZ1403"
+          },
+          "flight_date": {
+            "absent": true
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{{#assign 'd'}}{{#if request.query.flight_date}}{{request.query.flight_date}}{{else}}{{now format='yyyy-MM-dd'}}{{/if}}{{/assign}}{\"pagination\": {\"limit\": 100, \"offset\": 0, \"count\": 1, \"total\": 1}, \"data\": [{\"flight_date\": \"{{d}}\", \"flight_status\": \"landed\", \"departure\": {\"airport\": \"Pulkovo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"LED\", \"scheduled\": \"{{d}}T10:00:00+00:00\", \"actual\": \"{{d}}T10:12:00+00:00\", \"delay\": 12}, \"arrival\": {\"airport\": \"Sheremetyevo\", \"timezone\": \"Europe/Moscow\", \"iata\": \"SVO\", \"scheduled\": \"{{d}}T11:30:00+00:00\", \"actual\": \"{{d}}T11:35:00+00:00\", \"delay\": 5}, \"airline\": {\"name\": \"Mock Air\", \"iata\": \"ZZ\"}, \"flight\": {\"iata\": \"ZZ1403\", \"number\": \"1403\"}}]}",
+        "transformers": [
+          "response-template"
+        ]
+      }
+    }
+  ]
+}
