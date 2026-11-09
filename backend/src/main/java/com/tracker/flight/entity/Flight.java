@@ -72,6 +72,15 @@ public class Flight {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Column(name = "departure_delay_minutes")
+    private Integer departureDelayMinutes;
+
+    @Column(name = "arrival_delay_minutes")
+    private Integer arrivalDelayMinutes;
+
+    @Column(name = "estimated_arrival")
+    private Instant estimatedArrival;
+
     public Flight() {}
 
     public Flight(Long id, String flightIata, String departureIata, String departureCity, String departureAirportName,
@@ -105,6 +114,9 @@ public class Flight {
     }
 
     public static class Builder {
+        private Instant estimatedArrival;
+        private Integer arrivalDelayMinutes;
+        private Integer departureDelayMinutes;
         private Long id;
         private String flightIata;
         private String departureIata;
@@ -118,7 +130,7 @@ public class Flight {
         private Instant scheduledArrivalTime;
         private Instant actualArrivalTime;
         private String status = "SCHEDULED";
-        private Integer delayMinutes = 0;
+        private Integer delayMinutes;
         private Instant lastSyncedAt;
         private LocalDate flightDate;
         private Instant createdAt;
@@ -143,11 +155,21 @@ public class Flight {
         public Builder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
         public Builder updatedAt(Instant updatedAt) { this.updatedAt = updatedAt; return this; }
 
+        public Builder departureDelayMinutes(Integer value) { this.departureDelayMinutes = value; return this; }
+
+        public Builder arrivalDelayMinutes(Integer value) { this.arrivalDelayMinutes = value; return this; }
+
+        public Builder estimatedArrival(Instant value) { this.estimatedArrival = value; return this; }
+
         public Flight build() {
-            return new Flight(id, flightIata, departureIata, departureCity, departureAirportName,
+            Flight result = new Flight(id, flightIata, departureIata, departureCity, departureAirportName,
                     arrivalIata, arrivalCity, arrivalAirportName,
                     scheduledDepartureTime, actualDepartureTime, scheduledArrivalTime, actualArrivalTime,
                     status, delayMinutes, lastSyncedAt, flightDate, createdAt, updatedAt);
+            result.departureDelayMinutes = departureDelayMinutes;
+            result.arrivalDelayMinutes = arrivalDelayMinutes;
+            result.estimatedArrival = estimatedArrival;
+            return result;
         }
     }
 
@@ -188,4 +210,12 @@ public class Flight {
 
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public Integer getDepartureDelayMinutes() { return departureDelayMinutes; }
+    public void setDepartureDelayMinutes(Integer value) { this.departureDelayMinutes = value; }
+
+    public Integer getArrivalDelayMinutes() { return arrivalDelayMinutes; }
+    public void setArrivalDelayMinutes(Integer value) { this.arrivalDelayMinutes = value; }
+
+    public Instant getEstimatedArrival() { return estimatedArrival; }
+    public void setEstimatedArrival(Instant value) { this.estimatedArrival = value; }
 }

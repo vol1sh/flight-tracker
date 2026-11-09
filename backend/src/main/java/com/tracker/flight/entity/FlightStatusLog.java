@@ -25,12 +25,19 @@ public class FlightStatusLog {
     @Column(name = "new_status", nullable = false, length = 20)
     private String newStatus;
 
-    @Column(name = "delay_minutes", nullable = false)
+    @Column(name = "delay_minutes")
     private Integer delayMinutes;
 
     @CreationTimestamp
     @Column(name = "recorded_at", updatable = false)
     private Instant recordedAt;
+
+    @Column(name = "departure_delay_minutes")
+    private Integer departureDelayMinutes;
+    @Column(name = "arrival_delay_minutes")
+    private Integer arrivalDelayMinutes;
+    @Column(name = "estimated_arrival")
+    private Instant estimatedArrival;
 
     public FlightStatusLog() {}
 
@@ -84,4 +91,13 @@ public class FlightStatusLog {
 
     public Instant getRecordedAt() { return recordedAt; }
     public void setRecordedAt(Instant recordedAt) { this.recordedAt = recordedAt; }
+
+    public Integer getDepartureDelayMinutes() { return departureDelayMinutes; }
+    public void setDepartureDelayMinutes(Integer value) { this.departureDelayMinutes = value; }
+
+    public Integer getArrivalDelayMinutes() { return arrivalDelayMinutes; }
+    public void setArrivalDelayMinutes(Integer value) { this.arrivalDelayMinutes = value; }
+
+    public Instant getEstimatedArrival() { return estimatedArrival; }
+    public void setEstimatedArrival(Instant value) { this.estimatedArrival = value; }
 }

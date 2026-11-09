@@ -66,13 +66,16 @@ class FlightServiceTest {
                 .status("CANCELLED")
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", FLIGHT_DATE
         )).thenReturn(Optional.of(first));
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", otherDate
         )).thenReturn(Optional.of(second));
+
+        when(flightRepository.findByFlightIataAndFlightDate("SU100", FLIGHT_DATE)).thenReturn(Optional.of(first));
+        when(flightRepository.findByFlightIataAndFlightDate("SU100", otherDate)).thenReturn(Optional.of(second));
 
         when(logRepository.findByFlightIdOrderByRecordedAtDesc(1L))
                 .thenReturn(List.of(
@@ -141,7 +144,7 @@ class FlightServiceTest {
                 .fetchedAt(fetchedAt)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", FLIGHT_DATE
         )).thenReturn(Optional.empty());
 
@@ -194,7 +197,7 @@ class FlightServiceTest {
                 .lastSyncedAt(lastSync)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", FLIGHT_DATE
         )).thenReturn(Optional.of(saved));
 
@@ -251,7 +254,7 @@ class FlightServiceTest {
                 .delayMinutes(0)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 flightIata, FLIGHT_DATE
         )).thenReturn(Optional.empty());
 
@@ -310,7 +313,7 @@ class FlightServiceTest {
                 .isFallbackData(false)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 flightIata, FLIGHT_DATE
         )).thenReturn(Optional.of(existingFlight));
 
@@ -350,7 +353,7 @@ class FlightServiceTest {
                 .isFallbackData(true)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 flightIata, FLIGHT_DATE
         )).thenReturn(Optional.empty());
 
@@ -394,7 +397,7 @@ class FlightServiceTest {
                 .updatedAt(lastUpdated)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", FLIGHT_DATE
         )).thenReturn(Optional.of(savedFlight));
 
@@ -446,7 +449,7 @@ class FlightServiceTest {
                 .delayMinutes(0)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 expectedIata, FLIGHT_DATE
         )).thenReturn(Optional.empty());
 
@@ -462,7 +465,7 @@ class FlightServiceTest {
         assertThat(response.getFlightIata()).isEqualTo(expectedIata);
 
         verify(flightRepository)
-                .findByFlightIataAndFlightDate(expectedIata, FLIGHT_DATE);
+                .findForUpdate(expectedIata, FLIGHT_DATE);
 
         verify(aviationApiClient)
                 .fetchLiveFlight(expectedIata, FLIGHT_DATE);
@@ -481,7 +484,7 @@ class FlightServiceTest {
                 .delayMinutes(0)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 flightIata, FLIGHT_DATE
         )).thenReturn(Optional.of(existingFlight));
 
@@ -524,7 +527,7 @@ class FlightServiceTest {
                 .isFallbackData(true)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 flightIata, FLIGHT_DATE
         )).thenReturn(Optional.of(existingFlight));
 
@@ -569,7 +572,7 @@ class FlightServiceTest {
 
         LocalDate date = LocalDate.of(2026, 10, 26);
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", date
         )).thenReturn(Optional.empty());
 
@@ -621,7 +624,7 @@ class FlightServiceTest {
                         .fetchedAt(fetchedAt)
                         .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", date
         )).thenReturn(Optional.empty());
 
@@ -662,7 +665,7 @@ class FlightServiceTest {
                         .fetchedAt(Instant.now())
                         .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", date
         )).thenReturn(Optional.empty());
 

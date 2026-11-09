@@ -1,15 +1,21 @@
-DELETE FROM flight_status_logs WHERE flight_id IN (
-    SELECT id FROM flights WHERE flight_iata = 'SU100' AND flight_date BETWEEN '2026-10-01' AND '2026-10-31'
-);
-DELETE FROM flights WHERE flight_iata = 'SU100' AND flight_date BETWEEN '2026-10-01' AND '2026-10-31';
+-- SYNTHETIC QA DATA. Run only against an isolated demo database, never a production/history database.
+-- Refuse to replace existing history. All timestamps below belong to fictional observations.
+BEGIN;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM flights WHERE flight_iata = 'SU100'
+               AND flight_date BETWEEN '2026-10-01' AND '2026-10-31') THEN
+        RAISE EXCEPTION 'Demo range already contains flights; use an empty isolated demo database';
+    END IF;
+END $$;
 
 INSERT INTO flights (flight_iata, departure_iata, departure_city, departure_airport_name, arrival_iata, arrival_city, arrival_airport_name, scheduled_departure_time, actual_departure_time, scheduled_arrival_time, actual_arrival_time, status, delay_minutes, arrival_delay_minutes, flight_date, last_synced_at)
 SELECT
     'SU100', 'SVO', 'Moscow', 'Sheremetyevo', 'LED', 'Saint Petersburg', 'Pulkovo',
-    '2026-10-' || lpad(i::text, 2, '0') || ' 08:00:00Z',
-    '2026-10-' || lpad(i::text, 2, '0') || ' 08:00:00Z',
-    '2026-10-' || lpad(i::text, 2, '0') || ' 10:00:00Z',
-    '2026-10-' || lpad(i::text, 2, '0') || ' 10:00:00Z',
+    ('2026-10-' || lpad(i::text, 2, '0') || ' 08:00:00Z')::timestamptz,
+    ('2026-10-' || lpad(i::text, 2, '0') || ' 08:00:00Z')::timestamptz,
+    ('2026-10-' || lpad(i::text, 2, '0') || ' 10:00:00Z')::timestamptz,
+    ('2026-10-' || lpad(i::text, 2, '0') || ' 10:00:00Z')::timestamptz,
     'LANDED', 0, 0,
     ('2026-10-' || lpad(i::text, 2, '0'))::date,
     '2026-11-01 12:00:00Z'
@@ -32,3 +38,4 @@ SELECT id, 'SCHEDULED', 'ACTIVE', 0, NOW() FROM flights WHERE flight_iata = 'SU1
 
 INSERT INTO flight_status_logs (flight_id, previous_status, new_status, delay_minutes, recorded_at)
 SELECT id, 'ACTIVE', 'LANDED', 15, NOW() FROM flights WHERE flight_iata = 'SU100' AND flight_date = '2026-10-15';
+COMMIT;

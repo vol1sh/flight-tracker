@@ -62,6 +62,12 @@ public class FlightResponseDto {
     @Schema( description = "Данные получены в пределах допустимого периода актуальности", example = "true")
     private boolean dataFresh;
 
+    private Integer departureDelayMinutes;
+
+    private Integer arrivalDelayMinutes;
+
+    private Instant estimatedArrival;
+
     public FlightResponseDto() {}
 
     public FlightResponseDto(String flightIata, String departureAirport, String departureCity, String departureAirportName,
@@ -135,6 +141,9 @@ public class FlightResponseDto {
     }
 
     public static class Builder {
+        private Instant estimatedArrival;
+        private Integer arrivalDelayMinutes;
+        private Integer departureDelayMinutes;
         private String flightIata;
         private String departureAirport;
         private String departureCity;
@@ -147,7 +156,7 @@ public class FlightResponseDto {
         private Instant scheduledArrival;
         private Instant actualArrival;
         private String status;
-        private Integer delayMinutes = 0;
+        private Integer delayMinutes;
         private boolean isDegraded = false;
         private Instant lastUpdated;
         private LocalDate flightDate;
@@ -186,8 +195,14 @@ public class FlightResponseDto {
         }
 
 
+        public Builder departureDelayMinutes(Integer value) { this.departureDelayMinutes = value; return this; }
+
+        public Builder arrivalDelayMinutes(Integer value) { this.arrivalDelayMinutes = value; return this; }
+
+        public Builder estimatedArrival(Instant value) { this.estimatedArrival = value; return this; }
+
         public FlightResponseDto build() {
-            return new FlightResponseDto(
+            FlightResponseDto result = new FlightResponseDto(
                     flightIata,
                     departureAirport,
                     departureCity,
@@ -207,6 +222,10 @@ public class FlightResponseDto {
                     lastSyncedAt,
                     dataFresh
             );
+            result.departureDelayMinutes = departureDelayMinutes;
+            result.arrivalDelayMinutes = arrivalDelayMinutes;
+            result.estimatedArrival = estimatedArrival;
+            return result;
         }
     }
 
@@ -235,4 +254,13 @@ public class FlightResponseDto {
     public boolean isDataFresh() {
         return dataFresh;
     }
+
+    public Integer getDepartureDelayMinutes() { return departureDelayMinutes; }
+    public void setDepartureDelayMinutes(Integer value) { this.departureDelayMinutes = value; }
+
+    public Integer getArrivalDelayMinutes() { return arrivalDelayMinutes; }
+    public void setArrivalDelayMinutes(Integer value) { this.arrivalDelayMinutes = value; }
+
+    public Instant getEstimatedArrival() { return estimatedArrival; }
+    public void setEstimatedArrival(Instant value) { this.estimatedArrival = value; }
 }

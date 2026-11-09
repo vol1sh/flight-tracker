@@ -70,7 +70,7 @@ class FlightServicePartialUpdateTest {
                 .isFallbackData(false)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", FLIGHT_DATE
         )).thenReturn(Optional.of(existing));
 
@@ -140,7 +140,7 @@ class FlightServicePartialUpdateTest {
                 .isFallbackData(false)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", FLIGHT_DATE
         )).thenReturn(Optional.of(existing));
 
