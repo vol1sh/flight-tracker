@@ -42,6 +42,9 @@ class FlightServicePartialUpdateTest {
     @Mock
     private FlightStatusLogRepository logRepository;
 
+    @Mock
+    private FlightNotificationService notifications;
+
     @InjectMocks
     private FlightService flightService;
 
@@ -70,7 +73,7 @@ class FlightServicePartialUpdateTest {
                 .isFallbackData(false)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", FLIGHT_DATE
         )).thenReturn(Optional.of(existing));
 
@@ -140,7 +143,7 @@ class FlightServicePartialUpdateTest {
                 .isFallbackData(false)
                 .build();
 
-        when(flightRepository.findByFlightIataAndFlightDate(
+        when(flightRepository.findForUpdate(
                 "SU100", FLIGHT_DATE
         )).thenReturn(Optional.of(existing));
 

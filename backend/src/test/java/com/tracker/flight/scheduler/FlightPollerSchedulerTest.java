@@ -56,7 +56,7 @@ class FlightPollerSchedulerTest {
     }
 
     private void candidates(List<Flight> flights) {
-        when(flightRepository.findByStatusNotInAndFlightDateBetween(
+        when(flightRepository.findSubscribedFlights(
                 FlightPollerScheduler.TERMINAL_STATUSES,
                 FLIGHT_DATE.minusDays(1),
                 FLIGHT_DATE.plusDays(1)
@@ -97,7 +97,7 @@ class FlightPollerSchedulerTest {
 
         flightPollerScheduler.pollActiveFlights();
 
-        verify(flightRepository).findByStatusNotInAndFlightDateBetween(
+        verify(flightRepository).findSubscribedFlights(
                 FlightPollerScheduler.TERMINAL_STATUSES,
                 LocalDate.of(2026, 10, 24),
                 LocalDate.of(2026, 10, 26)

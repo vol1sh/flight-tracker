@@ -30,8 +30,7 @@ import java.util.List;
  *    ошибка одного рейса (404, 400 и т.п.) остальные рейсы не останавливает;
  *  - ответы идут через кэш Redis (3 мин), поэтому опрос чаще 3 минут нового не даёт.
  *
- * Источник рейсов сейчас — незавершённые рейсы из PostgreSQL. Когда появится таблица подписок,
- * {@link #findCandidates(LocalDate)} нужно заменить на «рейсы с активными подписками».
+ * Источник — уникальные выполнения рейсов с активными email-подписками.
  */
 @Component
 @ConditionalOnProperty(
@@ -175,11 +174,10 @@ public class FlightPollerScheduler {
     }
 
     /**
-     * Какие рейсы опрашивать. Сейчас — незавершённые рейсы в окне дат.
-     * После появления подписок (US-2): уникальные (номер, дата) с активными подписками в том же окне.
+     * Какие рейсы опрашивать: уникальные выполнения с активными подписками в окне дат.
      */
     List<Flight> findCandidates(LocalDate today) {
-        return flightRepository.findByStatusNotInAndFlightDateBetween(
+        return flightRepository.findSubscribedFlights(
                 TERMINAL_STATUSES,
                 today.minusDays(dateWindowDays),
                 today.plusDays(dateWindowDays)

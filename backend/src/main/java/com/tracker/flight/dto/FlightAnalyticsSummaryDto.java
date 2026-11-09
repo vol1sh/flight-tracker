@@ -1,6 +1,5 @@
 package com.tracker.flight.dto;
 
-import java.time.LocalDate;
 import java.time.Instant;
 
 public interface FlightAnalyticsSummaryDto {
@@ -11,6 +10,5 @@ public interface FlightAnalyticsSummaryDto {
     Double getAverageDelayMinutes();
     Double getOnTimeRate();
     Double getCancellationRate();
-    Double getReliabilityScore();
     Instant getLastUpdatedAt();
 }

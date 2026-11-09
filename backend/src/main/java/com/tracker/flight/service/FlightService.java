@@ -26,7 +26,6 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -42,15 +41,18 @@ public class FlightService {
     private final AviationApiClient aviationApiClient;
     private final FlightRepository flightRepository;
     private final FlightStatusLogRepository logRepository;
+    private final FlightNotificationService notifications;
 
     public FlightService(
             AviationApiClient aviationApiClient,
             FlightRepository flightRepository,
-            FlightStatusLogRepository logRepository
+            FlightStatusLogRepository logRepository,
+            FlightNotificationService notifications
     ) {
         this.aviationApiClient = aviationApiClient;
         this.flightRepository = flightRepository;
         this.logRepository = logRepository;
+        this.notifications = notifications;
     }
 
     @Transactional(readOnly = true)
@@ -73,7 +75,7 @@ public class FlightService {
         );
 
         Optional<Flight> existingFlightOpt =
-                flightRepository.findByFlightIataAndFlightDate(
+                flightRepository.findForUpdate(
                         cleanFlight,
                         flightDate
                 );
@@ -132,6 +134,11 @@ public class FlightService {
 
         if (existingFlightOpt.isPresent()) {
             flight = existingFlightOpt.get();
+            if (externalDto.getFetchedAt() != null && flight.getLastSyncedAt() != null
+                    && externalDto.getFetchedAt().isBefore(flight.getLastSyncedAt())) {
+                return mapToFlightResponseDto(flight, false);
+            }
+            FlightChangeDetector.Snapshot before = FlightChangeDetector.capture(flight);
 
             String updatedStatus = externalDto.getStatus() != null
                     && !externalDto.getStatus().isBlank()
@@ -141,42 +148,6 @@ public class FlightService {
             Integer updatedDelay = externalDto.getDelayMinutes() != null
                     ? externalDto.getDelayMinutes()
                     : flight.getDelayMinutes();
-
-            boolean statusChanged =
-                    !Objects.equals(flight.getStatus(), updatedStatus);
-
-            boolean delayChanged =
-                    !Objects.equals(flight.getDelayMinutes(), updatedDelay);
-
-            if (statusChanged || delayChanged) {
-                if (updatedDelay == null) {
-                    log.warn(
-                            "Рейс {} на дату {}: обновление пропущено, задержка неизвестна для записи истории",
-                            cleanFlight,
-                            flightDate
-                    );
-
-                    return returnSavedFlightOr503(cleanFlight, existingFlightOpt);
-                }
-
-                log.info(
-                        "Аудит рейса {}: статус '{}' -> '{}', задержка {} -> {} мин",
-                        cleanFlight,
-                        flight.getStatus(),
-                        updatedStatus,
-                        flight.getDelayMinutes(),
-                        updatedDelay
-                );
-
-                FlightStatusLog statusLog = FlightStatusLog.builder()
-                        .flight(flight)
-                        .previousStatus(flight.getStatus())
-                        .newStatus(updatedStatus)
-                        .delayMinutes(updatedDelay)
-                        .build();
-
-                logRepository.save(statusLog);
-            }
 
             if (externalDto.getDepartureAirport() != null) {
                 flight.setDepartureIata(externalDto.getDepartureAirport());
@@ -206,8 +177,21 @@ public class FlightService {
                 );
             }
 
-            flight.setStatus(updatedStatus);
+            flight.setStatus(updatedStatus.trim().toUpperCase(Locale.ROOT));
             flight.setDelayMinutes(updatedDelay);
+            if (externalDto.getDepartureDelayMinutes() != null) {
+                flight.setDepartureDelayMinutes(externalDto.getDepartureDelayMinutes());
+            }
+            if (externalDto.getArrivalDelayMinutes() != null) {
+                flight.setArrivalDelayMinutes(externalDto.getArrivalDelayMinutes());
+            } else if (TERMINAL_STATUSES.contains(flight.getStatus())) {
+                // A delay observed in flight is not a confirmed final arrival delay.
+                // Analytics will use actual - scheduled when those timestamps exist.
+                flight.setArrivalDelayMinutes(null);
+            }
+            if (externalDto.getEstimatedArrival() != null) {
+                flight.setEstimatedArrival(externalDto.getEstimatedArrival());
+            }
 
             if (externalDto.getFetchedAt() != null) {
                 flight.setLastSyncedAt(externalDto.getFetchedAt());
@@ -238,6 +222,13 @@ public class FlightService {
             }
 
             flight = flightRepository.save(flight);
+            var change = FlightChangeDetector.detect(before, flight);
+            if (change.isPresent()) {
+                FlightStatusLog entry = logRepository.save(change.get());
+                if (externalDto.getFetchedAt() != null && isFlightDataFresh(flight, false)) {
+                    notifications.enqueue(entry, before);
+                }
+            }
         } else {
             boolean hasRequiredData = externalDto.getStatus() != null
                     && !externalDto.getStatus().isBlank()
@@ -246,8 +237,7 @@ public class FlightService {
                     && externalDto.getArrivalAirport() != null
                     && externalDto.getArrivalAirport().matches("[A-Z]{3}")
                     && externalDto.getScheduledDeparture() != null
-                    && externalDto.getScheduledArrival() != null
-                    && externalDto.getDelayMinutes() != null;
+                    && externalDto.getScheduledArrival() != null;
 
             if (!hasRequiredData) {
                 log.warn(
@@ -275,21 +265,17 @@ public class FlightService {
                     .actualDepartureTime(externalDto.getActualDeparture())
                     .scheduledArrivalTime(externalDto.getScheduledArrival())
                     .actualArrivalTime(externalDto.getActualArrival())
-                    .status(externalDto.getStatus())
+                    .status(externalDto.getStatus().trim().toUpperCase(Locale.ROOT))
+                    .departureDelayMinutes(externalDto.getDepartureDelayMinutes())
+                    .arrivalDelayMinutes(externalDto.getArrivalDelayMinutes())
+                    .estimatedArrival(externalDto.getEstimatedArrival())
                     .delayMinutes(externalDto.getDelayMinutes())
                     .lastSyncedAt(externalDto.getFetchedAt())
                     .build();
 
             flight = flightRepository.save(flight);
 
-            FlightStatusLog initialLog = FlightStatusLog.builder()
-                    .flight(flight)
-                    .previousStatus(null)
-                    .newStatus(flight.getStatus())
-                    .delayMinutes(flight.getDelayMinutes())
-                    .build();
-
-            logRepository.save(initialLog);
+            logRepository.save(FlightChangeDetector.initialState(flight));
         }
 
         log.info(
@@ -301,21 +287,8 @@ public class FlightService {
         return mapToFlightResponseDto(flight, false);
     }
 
-    private String normalizeAndValidateFlightNumber(String flightIata) {
-        String cleanFlight = flightIata == null
-                ? ""
-                : flightIata.trim().toUpperCase(Locale.ROOT);
-
-        if (!cleanFlight.matches(
-                "(?:[A-Z][A-Z0-9]|[0-9][A-Z]|[A-Z]{3})-?[0-9]{1,4}[A-Z]?"
-        )) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Неверный формат номера рейса: например SU100, SU-100 или ANA995"
-            );
-        }
-
-        return cleanFlight.replace("-", "");
+    private String normalizeAndValidateFlightNumber(String value) {
+        return FlightFilters.flightNumber(value);
     }
 
     private void validateFlightDate(LocalDate flightDate) {
@@ -385,7 +358,8 @@ public class FlightService {
                                 item.getPreviousStatus(),
                                 item.getNewStatus(),
                                 item.getDelayMinutes(),
-                                item.getRecordedAt()
+                                item.getRecordedAt(), item.getDepartureDelayMinutes(),
+                                item.getArrivalDelayMinutes(), item.getEstimatedArrival()
                         ))
                         .toList())
                 .orElse(Collections.emptyList());
@@ -452,6 +426,9 @@ public class FlightService {
                 )
                 .status(flight.getStatus())
                 .delayMinutes(flight.getDelayMinutes())
+                .departureDelayMinutes(flight.getDepartureDelayMinutes())
+                .arrivalDelayMinutes(flight.getArrivalDelayMinutes())
+                .estimatedArrival(flight.getEstimatedArrival())
                 .isDegraded(isDegraded)
                 .dataFresh(dataFresh)
                 .lastSyncedAt(lastSyncedAt)
