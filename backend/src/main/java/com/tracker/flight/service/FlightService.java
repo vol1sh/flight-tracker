@@ -10,6 +10,7 @@ import com.tracker.flight.dto.ExternalFlightDto;
 import com.tracker.flight.dto.FlightResponseDto;
 import com.tracker.flight.dto.FlightStatusLogDto;
 import com.tracker.flight.entity.Flight;
+import com.tracker.flight.entity.FlightStatusLog;
 import com.tracker.flight.repository.FlightRepository;
 import com.tracker.flight.repository.FlightStatusLogRepository;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
@@ -40,15 +41,18 @@ public class FlightService {
     private final AviationApiClient aviationApiClient;
     private final FlightRepository flightRepository;
     private final FlightStatusLogRepository logRepository;
+    private final FlightNotificationService notifications;
 
     public FlightService(
             AviationApiClient aviationApiClient,
             FlightRepository flightRepository,
-            FlightStatusLogRepository logRepository
+            FlightStatusLogRepository logRepository,
+            FlightNotificationService notifications
     ) {
         this.aviationApiClient = aviationApiClient;
         this.flightRepository = flightRepository;
         this.logRepository = logRepository;
+        this.notifications = notifications;
     }
 
     @Transactional(readOnly = true)
@@ -218,7 +222,13 @@ public class FlightService {
             }
 
             flight = flightRepository.save(flight);
-            FlightChangeDetector.detect(before, flight).ifPresent(logRepository::save);
+            var change = FlightChangeDetector.detect(before, flight);
+            if (change.isPresent()) {
+                FlightStatusLog entry = logRepository.save(change.get());
+                if (externalDto.getFetchedAt() != null && isFlightDataFresh(flight, false)) {
+                    notifications.enqueue(entry, before);
+                }
+            }
         } else {
             boolean hasRequiredData = externalDto.getStatus() != null
                     && !externalDto.getStatus().isBlank()

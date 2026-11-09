@@ -9,6 +9,22 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:tracker_user}
     password: ${SPRING_DATASOURCE_PASSWORD:tracker_secret}
     driver-class-name: org.postgresql.Driver
+  task:
+    scheduling:
+      pool:
+        size: 2
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
+      mail.smtp.starttls.required: ${MAIL_SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
@@ -23,12 +39,21 @@ spring:
     baseline-on-migrate: true
 
 management:
+  health:
+    # Flight search/analytics remain available while delivery is queued for retry.
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
 
 app:
+  mail:
+    enabled: ${MAIL_ENABLED:true}
+    from: ${MAIL_FROM:no-reply@flight-tracker.test}
+    public-base-url: ${MAIL_PUBLIC_BASE_URL:http://localhost:8080}
+    outbox-delay-ms: ${MAIL_OUTBOX_DELAY_MS:10000}
   aviation-api:
     base-url: ${AVIATION_API_BASE_URL:https://api.aviationstack.com/v1}
     key: ${AVIATION_API_KEY:}

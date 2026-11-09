@@ -35,6 +35,14 @@ services:
     networks:
       - flight_network
 
+  mailpit:
+    image: axllent/mailpit:v1.27.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks:
+      - flight_network
+
   backend:
     build:
       context: ./backend
@@ -64,6 +72,15 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-flight_tracker_db}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-tracker_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-tracker_secret}
+      SPRING_MAIL_HOST: ${MAIL_HOST:-mailpit}
+      SPRING_MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@flight-tracker.test}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
+      MAIL_PUBLIC_BASE_URL: ${MAIL_PUBLIC_BASE_URL:-http://localhost:8080}
+      MAIL_ENABLED: ${MAIL_ENABLED:-true}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       AVIATION_API_BASE_URL: ${AVIATION_API_BASE_URL:-https://api.aviationstack.com/v1}

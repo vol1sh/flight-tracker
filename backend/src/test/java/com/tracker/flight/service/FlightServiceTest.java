@@ -44,6 +44,9 @@ class FlightServiceTest {
     @Mock
     private FlightStatusLogRepository logRepository;
 
+    @Mock
+    private FlightNotificationService notifications;
+
     @InjectMocks
     private FlightService flightService;
 

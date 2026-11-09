@@ -23,6 +23,9 @@ class FlightMeasurementsTest {
     @Mock AviationApiClient api;
     @Mock FlightRepository flights;
     @Mock FlightStatusLogRepository logs;
+    @Mock
+    private FlightNotificationService notifications;
+
     @InjectMocks FlightService service;
     private final LocalDate date = LocalDate.of(2026, 11, 9);
     private final Instant now = Instant.parse("2026-11-09T12:00:00Z");

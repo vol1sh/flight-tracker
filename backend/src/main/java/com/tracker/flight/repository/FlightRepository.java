@@ -28,6 +28,15 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
     List<Flight> findByStatusNotIn(List<String> statuses);
     List<Flight> findByStatusNotInAndFlightDateBetween(List<String> statuses, LocalDate from, LocalDate to);
 
+    @Query("""
+        select f from Flight f where f.status not in :statuses
+        and f.flightDate between :fromDate and :toDate
+        and exists (select s.id from EmailSubscription s where s.status = 'ACTIVE'
+                    and s.flightIata = f.flightIata and s.flightDate = f.flightDate)
+        """)
+    List<Flight> findSubscribedFlights(@Param("statuses") List<String> statuses,
+            @Param("fromDate") LocalDate from, @Param("toDate") LocalDate to);
+
     Page<Flight> findByFlightIataAndFlightDateBetween(String flightIata, LocalDate from, LocalDate to, Pageable pageable);
     Page<Flight> findByDepartureIataAndArrivalIataAndFlightDateBetween(
             String departure, String arrival, LocalDate from, LocalDate to, Pageable pageable);
