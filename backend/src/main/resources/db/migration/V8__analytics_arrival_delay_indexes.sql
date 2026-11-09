@@ -1,6 +1,7 @@
 ALTER TABLE flights
     ADD COLUMN IF NOT EXISTS departure_delay_minutes INTEGER,
-    ADD COLUMN IF NOT EXISTS arrival_delay_minutes INTEGER;
+    ADD COLUMN IF NOT EXISTS arrival_delay_minutes INTEGER,
+    ADD COLUMN IF NOT EXISTS estimated_arrival TIMESTAMP WITH TIME ZONE;
 
 CREATE INDEX IF NOT EXISTS idx_flights_route_date
     ON flights (departure_iata, arrival_iata, flight_date);
