@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { PlaneLogo } from './components/PlaneIcons';
+import SiteNavigation from './components/SiteNavigation';
 import EmailSubscriptionForm from './components/EmailSubscriptionForm';
 import type { FlightResponse, FlightStatusLog, ActiveFlight } from './types/flight';
 
@@ -613,6 +614,7 @@ const hRes = historyResult.status === 'fulfilled' ? historyResult.value : null;
         </div>
       </header>
 
+      <SiteNavigation />
       {/* ── Main Content ── */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
         {/* Search */}
