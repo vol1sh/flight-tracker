@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { PlaneLogo } from './components/PlaneIcons';
+import EmailSubscriptionForm from './components/EmailSubscriptionForm';
 import type { FlightResponse, FlightStatusLog, ActiveFlight } from './types/flight';
 
 interface SystemStatus {
@@ -1012,6 +1013,7 @@ const hRes = historyResult.status === 'fulfilled' ? historyResult.value : null;
         )}
       </main>
 
+      <EmailSubscriptionForm />
       {/* ── Footer ── */}
       <footer className="border-t border-slate-200 bg-white py-5 px-6 text-center text-[13px] text-slate-400">
         Flight Tracker · Время отображается по Москве (MSK / UTC+3)
