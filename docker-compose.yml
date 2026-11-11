@@ -90,6 +90,9 @@ services:
       SCHEDULER_POLLER_MAX_FLIGHTS: ${SCHEDULER_POLLER_MAX_FLIGHTS:-5}
     networks:
       - flight_network
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
   frontend:
     build:
