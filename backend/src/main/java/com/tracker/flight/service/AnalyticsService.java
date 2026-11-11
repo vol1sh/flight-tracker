@@ -15,7 +15,7 @@ import java.time.LocalDate;
 @Service
 @Transactional(readOnly = true)
 public class AnalyticsService {
-    private static final int MIN_COMPLETED = 10;
+    private static final int MIN_COMPLETED = 5;
     private static final double MIN_DELAY_COVERAGE = 0.80;
     private final FlightRepository flights;
 

@@ -432,7 +432,7 @@ curl -i 'http://localhost:8080/api/v1/flights/SU100?date=2026-10-27'
 
 **Команды для повторяемой проверки:**
 ```bash
-cp .env.example .env
+cp .env. .env
 docker compose up -d --build
 docker compose ps
 curl -i http://localhost:8080/actuator/health
